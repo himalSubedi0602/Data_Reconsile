@@ -1,0 +1,8 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "erc_flood_qualtrics_export_2026-09-28.csv": "9f4e6335b9fe805f304db29163f3dcf4dac697b40fb868cbb8693edfb8e779e0",
+    "erc_flood_survey_definition.qsf": "4998802910f64ebeeb2c1bf1c12d805b5e582065ba341eab44f16fae96c5b7e0",
+    "hs_paper_log.txt": "faa141eca294de47e979dd6ccff1b41610df54fc87150077b45997a50bbb76e0"
+  }
+}

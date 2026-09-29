@@ -1,0 +1,17 @@
+# Raw survey data — contains participant responses; never commit
+csv_files/
+data/
+output/
+reviews/
+*.qsf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# macOS
+.DS_Store

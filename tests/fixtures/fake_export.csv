@@ -1,0 +1,17 @@
+StartDate,ResponseId,RecordedDate,Finished,QID2,Q1,Q2,Q2_4_TEXT,Q9_1,Q13
+Start Date,Response ID,Recorded Date,Finished,Enter the survey code,How long have you lived here?,What type of home? - Selected Choice,What type of home? - Other - Text,Basement use - Storage,Additional details
+"{""ImportId"":""startDate"",""timeZone"":""America/Chicago""}","{""ImportId"":""_recordId""}","{""ImportId"":""recordedDate"",""timeZone"":""America/Chicago""}","{""ImportId"":""finished""}","{""ImportId"":""QID2_TEXT""}","{""ImportId"":""QID3""}","{""ImportId"":""QID4""}","{""ImportId"":""QID4_4_TEXT""}","{""ImportId"":""QID12_1""}","{""ImportId"":""QID42_TEXT""}"
+2026-01-01 10:00:00,R_fake01,2026-01-01 10:05:00,1,1-0001 HS,05,1,,1,N/A
+2026-01-01 10:10:00,R_fake02,2026-01-01 10:15:00,1,1-0002 hs,2,4,  Senior living ,,
+2026-01-01 10:20:00,R_fake03,2026-01-01 10:25:00,1,1-0003HS,3,2,,1,
+2026-01-01 10:30:00,R_fake04,2026-01-01 10:35:00,1,1- 0004  HS,4,1,,,
+2026-01-01 10:40:00,R_fake05,2026-01-01 10:45:00,1,1-0005,5,1,,1,
+2026-01-01 10:50:00,R_fake06,2026-01-01 10:55:00,1,1-0006 HD,1,2,,,
+2026-01-01 11:00:00,R_fake07,2026-01-01 11:05:00,1,1-0007 HS,2,1,,1,
+2026-01-01 11:10:00,R_fake08,2026-01-01 11:15:00,0,1-0007 HS,3,1,,,"Water in
+basement"
+2026-01-01 11:20:00,R_fake09,2026-01-01 11:25:00,1,1-0009 HS,4,2,,1,
+2026-01-01 11:30:00,R_fake10,2026-01-01 11:35:00,1,10010 HS,5,1,,,
+2026-01-01 11:40:00,R_fake11,2026-01-01 11:45:00,1,1-0001 CH,05,1,,1,Café
+2026-01-01 11:50:00,R_fake12,2026-01-01 11:55:00,1,1-0012 HS,1,1,,,
+2026-01-01 12:00:00,R_fake13,2026-01-01 12:05:00,1,1-0002 CH,2,4,senior living,,

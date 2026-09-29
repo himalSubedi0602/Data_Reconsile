@@ -1,0 +1,11 @@
+{
+  "export_file": "data/raw/erc_flood_qualtrics_export_2026-09-28.csv",
+  "raw_dir": "data/raw",
+  "working_dir": "data/working",
+  "id_column": "QID2",
+  "code_pattern": "^\\d+-\\d{4}$",
+  "entrants": {
+    "HS": {"dataset": "A", "paper_log": "data/raw/hs_paper_log.txt"},
+    "CH": {"dataset": "B", "paper_log": null}
+  }
+}
