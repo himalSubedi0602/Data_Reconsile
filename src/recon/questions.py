@@ -17,6 +17,16 @@ def link_columns(columns: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def assign_roles(linked: pd.DataFrame, id_column: str) -> pd.DataFrame:
+    """Add role: METADATA (Qualtrics' own columns, never compared), IDENTIFIER (the survey
+    code, used to match A with B) or COMPARE (an answer)."""
+    out = linked.copy()
+    out["role"] = "COMPARE"
+    out.loc[out["qid"] == "", "role"] = "METADATA"
+    out.loc[out["column"] == id_column, "role"] = "IDENTIFIER"
+    return out
+
+
 def other_pairs(linked: pd.DataFrame) -> pd.DataFrame:
     """Each "Other" text-box column, with the column that says whether Other was picked.
 

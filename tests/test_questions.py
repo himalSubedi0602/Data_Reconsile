@@ -1,6 +1,6 @@
 import pandas as pd
 
-from recon.questions import link_columns, other_pairs
+from recon.questions import assign_roles, link_columns, other_pairs
 
 
 def test_link_columns():
@@ -31,3 +31,12 @@ def test_other_pairs():
         ("Q9_6_TEXT", "Q9_6", ""),       # tick-box: the option's own column
         ("Q11_9_TEXT", "Q11_9", ""),     # grid: the "Other" row's rating
     ]                                    # QID2 is a text question, not an Other box
+
+
+def test_assign_roles():
+    linked = link_columns(pd.DataFrame({
+        "column":    ["StartDate", "QID2",      "Q2"],
+        "import_id": ["startDate", "QID2_TEXT", "QID4"],
+        "choice_id": ["",          "",          ""],
+    }))
+    assert list(assign_roles(linked, "QID2")["role"]) == ["METADATA", "IDENTIFIER", "COMPARE"]

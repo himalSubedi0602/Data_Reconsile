@@ -78,3 +78,11 @@ def test_other_pairs_match_qsf_text_boxes():
     boxes = choices[choices["has_text"]]
     assert set(zip(pairs["qid"], pairs["choice"])) == set(zip(boxes["qid"], boxes["code"]))
     assert len(pairs) == 17
+
+
+def test_column_roles():
+    from recon.loader import read_export
+    from recon.questions import assign_roles, link_columns
+
+    roles = assign_roles(link_columns(read_export(CONFIG.export_file)[0]), CONFIG.id_column)
+    assert roles["role"].value_counts().to_dict() == {"COMPARE": 155, "METADATA": 17, "IDENTIFIER": 1}
