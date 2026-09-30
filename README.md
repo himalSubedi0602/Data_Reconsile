@@ -1,25 +1,49 @@
-Data Reconcile
+# Data Reconcile
 
-Data Reconcile is a Python-based system for comparing, validating, and reconciling two independently entered datasets from the same survey or data-entry source.
+Python scripts that clean the double-entered **ERC Flood Survey** data (Qualtrics) and produce a
+final dataset for analysis in R.
 
-The system is designed to identify discrepancies, distinguish harmless formatting differences from substantive data-entry errors, support human review, and produce a validated final dataset.
+Each paper survey was typed into Qualtrics twice, by two people. The scripts compare the two
+entries, list every disagreement for the team to resolve against the paper survey, and build the
+final dataset from the agreed answers and the team's corrections. Raw data is never modified.
 
-Key Features
-Compare two datasets field-by-field
-Validate dataset structure and headers
-Match records using appropriate identifiers
-Normalize harmless differences such as whitespace and capitalization
-Detect and classify discrepancies
-Support human review of conflicting values
-Maintain an audit trail of changes and decisions
-Generate a final reconciled dataset
-Produce summary and validation reports
-Technology
-Python
-Pandas
-OpenPyXL
-CSV / Excel
-Qualtrics exports
-Project Goal
+See [PLAN.md](PLAN.md) for the full plan.
 
-The goal of Data Reconcile is to reduce manual effort in double-data-entry verification while maintaining data accuracy, traceability, and human oversight.
+## Setup
+
+Requires Python 3.11+.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+git config core.hooksPath scripts/hooks
+```
+
+The last line turns on the pre-push hook, which runs the tests before every push.
+
+Survey data is **not** in this repository. Put the raw files in `data/raw/` (see `config/project.json`).
+
+## Usage
+
+```bash
+.venv/bin/python -m recon.loader            # load the export(s) → data/working/
+.venv/bin/python -m recon.questions         # build the question map → config/questions.json
+.venv/bin/python -m recon.checksums verify  # check the raw files are unchanged
+.venv/bin/python -m recon.checksums update  # record fingerprints after adding a new raw file
+.venv/bin/python -m pytest -q               # run the tests
+```
+
+More steps (comparison, final dataset) are added as the cleanup progresses.
+
+## Outputs
+
+| File | What it is |
+|---|---|
+| `data/working/dataset_a.csv`, `dataset_b.csv` | Each person's entries used for the comparison |
+| `data/working/excluded_entries.csv` | Entries set aside, with the reason |
+| `data/working/load_record.json` | Raw-file fingerprints and counts for each load |
+| `config/questions.json` | What every column means (not in Git: contains the survey wording) |
+
+## Tech
+
+Python · pandas · pytest · Qualtrics CSV exports · R (for the analysis)
