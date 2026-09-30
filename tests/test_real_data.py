@@ -36,3 +36,11 @@ def test_loader_reproduces_phase_0_counts():
     assert counts["excluded_by_reason"]["NO_INITIALS"] == 175
     hs_set_aside = counts["excluded"] - counts["excluded_by_reason"]["NO_INITIALS"]
     assert hs_set_aside == 138
+
+
+def test_qsf_lists_all_32_questions():
+    from recon.qsf import read_questions
+
+    q = read_questions(CONFIG.raw_dir / "erc_flood_survey_definition.qsf")
+    assert len(q) == 32                     # Q1–Q31 + the survey-code question
+    assert q["export_tag"].is_unique

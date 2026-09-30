@@ -1,0 +1,14 @@
+{
+  "SurveyEntry": {"SurveyName": "Fake Survey"},
+  "SurveyElements": [
+    {"Element": "BL", "Payload": {}},
+    {"Element": "SQ", "Payload": {"QuestionID": "QID10", "DataExportTag": "Q9", "QuestionType": "MC",
+      "Selector": "MAVR", "QuestionText": "Basement&nbsp;use? <b>Check all</b>"}},
+    {"Element": "SQ", "Payload": {"QuestionID": "QID1", "DataExportTag": "", "QuestionType": "DB",
+      "Selector": "TB", "QuestionText": "Welcome text"}},
+    {"Element": "SQ", "Payload": {"QuestionID": "QID2", "DataExportTag": "", "QuestionType": "TE",
+      "Selector": "ML", "QuestionText": "Enter the survey code"}},
+    {"Element": "SQ", "Payload": {"QuestionID": "QID3", "DataExportTag": "Q1", "QuestionType": "MC",
+      "Selector": "SAVR", "QuestionText": "How long have you lived here?"}}
+  ]
+}
