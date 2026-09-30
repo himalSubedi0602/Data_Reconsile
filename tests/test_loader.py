@@ -218,5 +218,5 @@ def test_writes_all_outputs(project):
     assert names == {"dataset_a.csv", "dataset_b.csv", "columns.csv", "excluded_entries.csv",
                      "duplicate_codes.csv", "paper_log_not_in_export.csv", "load_record.json"}
     record = json.loads((project.working_dir / "load_record.json").read_text())
-    assert set(record["raw_files"]) == {"export.csv", "hs_paper_log.txt"}
+    assert set(record["raw_files"]) == {"export.csv", "hs_paper_log.txt", "survey.qsf"}
     assert record["counts"]["dataset_A"] == 4

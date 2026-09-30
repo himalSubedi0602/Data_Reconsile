@@ -101,10 +101,12 @@ def read_export(path) -> tuple[pd.DataFrame, pd.DataFrame]:
         raise LoaderError(f"{path.name}: column names appear more than once: {repeated}. "
                           "Columns can't be told apart.")
 
-    import_ids = []
+    import_ids, choice_ids = [], []
     for i, cell in enumerate(id_row):
         try:
-            import_ids.append(json.loads(cell)["ImportId"])
+            meta = json.loads(cell)
+            import_ids.append(meta["ImportId"])
+            choice_ids.append(meta.get("choiceId", ""))   # set on check-all option columns
         except (json.JSONDecodeError, KeyError, TypeError):
             raise LoaderError(
                 f"{path.name}: header row 3, column {i + 1} ({names[i]}) is not a Qualtrics "
@@ -122,6 +124,7 @@ def read_export(path) -> tuple[pd.DataFrame, pd.DataFrame]:
         "column": names,
         "question_text": texts,
         "import_id": import_ids,
+        "choice_id": choice_ids,
     })
     data = pd.DataFrame(entries, columns=names, dtype=object)
     data.insert(0, ENTRY_NUMBER, range(1, len(data) + 1))

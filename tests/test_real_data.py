@@ -1,4 +1,4 @@
-"""Checks against the real raw data.
+"""Checks against the real raw data, one per phase.
 
 The raw data is never committed, so these tests are skipped on GitHub and run only on a
 computer that has data/raw/ (they run before every push via the pre-push hook).
@@ -26,21 +26,23 @@ def test_raw_files_match_recorded_checksums():
         "'python -m recon.checksums update' and commit config/raw_checksums.json.")
 
 
-def test_loader_reproduces_phase_0_counts():
-    from recon.loader import load
+def test_phase_1_loader_and_question_map():
+    import json
+
+    from recon.loader import load, read_export
+    from recon.qsf import read_choices, read_questions
+    from recon.questions import build_question_map
 
     counts = load(CONFIG).record["counts"]
     assert counts["entries_by_initials"] == {"(none)": 175, "HS": 554}
-    assert counts["dataset_A"] == 416
-    assert counts["dataset_B"] == 0
-    assert counts["excluded_by_reason"]["NO_INITIALS"] == 175
-    hs_set_aside = counts["excluded"] - counts["excluded_by_reason"]["NO_INITIALS"]
-    assert hs_set_aside == 138
+    assert (counts["dataset_A"], counts["dataset_B"]) == (416, 0)
+    assert counts["excluded"] - counts["excluded_by_reason"]["NO_INITIALS"] == 138   # HS set aside
 
-
-def test_qsf_lists_all_32_questions():
-    from recon.qsf import read_questions
-
-    q = read_questions(CONFIG.raw_dir / "erc_flood_survey_definition.qsf")
-    assert len(q) == 32                     # Q1–Q31 + the survey-code question
-    assert q["export_tag"].is_unique
+    qmap = build_question_map(read_export(CONFIG.export_file)[0], read_questions(CONFIG.qsf_file),
+                              read_choices(CONFIG.qsf_file), CONFIG.id_column)
+    json.dumps(qmap)
+    assert (len(qmap["questions"]), len(qmap["columns"]), len(qmap["other_pairs"])) == (32, 173, 17)
+    roles = [c["role"] for c in qmap["columns"]]
+    assert (roles.count("COMPARE"), roles.count("METADATA"), roles.count("IDENTIFIER")) == (155, 17, 1)
+    q11_7 = next(c for c in qmap["columns"] if c["column"] == "Q11_7")
+    assert q11_7["choice"] == "8"                         # grid row 8, "Property damage"

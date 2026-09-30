@@ -1,6 +1,6 @@
 StartDate,ResponseId,RecordedDate,Finished,QID2,Q1,Q2,Q2_4_TEXT,Q9_1,Q13
 Start Date,Response ID,Recorded Date,Finished,Enter the survey code,How long have you lived here?,What type of home? - Selected Choice,What type of home? - Other - Text,Basement use - Storage,Additional details
-"{""ImportId"":""startDate"",""timeZone"":""America/Chicago""}","{""ImportId"":""_recordId""}","{""ImportId"":""recordedDate"",""timeZone"":""America/Chicago""}","{""ImportId"":""finished""}","{""ImportId"":""QID2_TEXT""}","{""ImportId"":""QID3""}","{""ImportId"":""QID4""}","{""ImportId"":""QID4_4_TEXT""}","{""ImportId"":""QID12_1""}","{""ImportId"":""QID42_TEXT""}"
+"{""ImportId"":""startDate"",""timeZone"":""America/Chicago""}","{""ImportId"":""_recordId""}","{""ImportId"":""recordedDate"",""timeZone"":""America/Chicago""}","{""ImportId"":""finished""}","{""ImportId"":""QID2_TEXT""}","{""ImportId"":""QID3""}","{""ImportId"":""QID4""}","{""ImportId"":""QID4_4_TEXT""}","{""ImportId"":""QID12"",""choiceId"":""1""}","{""ImportId"":""QID42_TEXT""}"
 2026-01-01 10:00:00,R_fake01,2026-01-01 10:05:00,1,1-0001 HS,05,1,,1,N/A
 2026-01-01 10:10:00,R_fake02,2026-01-01 10:15:00,1,1-0002 hs,2,4,  Senior living ,,
 2026-01-01 10:20:00,R_fake03,2026-01-01 10:25:00,1,1-0003HS,3,2,,1,

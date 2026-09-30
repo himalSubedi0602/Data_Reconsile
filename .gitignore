@@ -5,6 +5,8 @@ output/
 reviews/
 *.qsf
 !tests/fixtures/*.qsf
+# Contains survey wording; regenerate with: python -m recon.questions
+config/questions.json
 
 # Python
 __pycache__/

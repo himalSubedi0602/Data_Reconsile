@@ -124,7 +124,7 @@ config/
 └── validation_rules.json
 ```
 
-`questions.json` is **generated from the `.qsf` file** and then reviewed once by a person. It records, for each of the 31 questions: its type (single choice, check-all, matrix/grid, open text), the choices, the physical columns, and the 20 Other + text pairs.
+`questions.json` is **generated from the `.qsf` file** and then reviewed once by a person. It records, for each of the 31 questions: its type (single choice, check-all, matrix/grid, open text), the choices, the physical columns, and the 17 Other + text pairs.
 
 Columns are matched to questions using the **ImportId** (third header row), not the column name. In this survey the names don't always match the internal IDs (e.g. column `Q11_7` is matrix row 8, "Property damage").
 

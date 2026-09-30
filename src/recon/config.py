@@ -25,6 +25,7 @@ class EntrantConfig:
 class ProjectConfig:
     path: Path                 # the config file itself
     export_file: Path
+    qsf_file: Path
     raw_dir: Path
     working_dir: Path
     id_column: str             # column holding the survey code + entrant initials
@@ -42,7 +43,7 @@ def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
     except json.JSONDecodeError as e:
         raise ConfigError(f"{path} is not valid JSON: {e}") from None
 
-    missing = [k for k in ("export_file", "raw_dir", "working_dir", "id_column",
+    missing = [k for k in ("export_file", "qsf_file", "raw_dir", "working_dir", "id_column",
                            "code_pattern", "entrants") if k not in raw]
     if missing:
         raise ConfigError(f"{path} is missing: {', '.join(missing)}")
@@ -63,6 +64,7 @@ def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
     return ProjectConfig(
         path=path,
         export_file=root / raw["export_file"],
+        qsf_file=root / raw["qsf_file"],
         raw_dir=root / raw["raw_dir"],
         working_dir=root / raw["working_dir"],
         id_column=raw["id_column"],
