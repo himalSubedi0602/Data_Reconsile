@@ -53,3 +53,15 @@ def test_qsf_choices():
     assert c["has_text"].sum() == 17        # "Other, please describe" style options
     assert list(c[(c["qid"] == "QID24") & (c["kind"] == "scale")]["label"]) == [
         "1 (Do Not Trust)", "2", "3", "4", "5 (Strongly Trust)", "Not Familiar"]
+
+
+def test_every_question_column_links_to_a_qsf_question():
+    from recon.loader import read_export
+    from recon.qsf import read_questions
+    from recon.questions import link_columns
+
+    linked = link_columns(read_export(CONFIG.export_file)[0]).set_index("column")
+    qids = set(read_questions(CONFIG.raw_dir / "erc_flood_survey_definition.qsf")["qid"])
+    assert (linked["qid"] == "").sum() == 17                  # Qualtrics metadata columns
+    assert set(linked.loc[linked["qid"] != "", "qid"]) == qids
+    assert linked.loc["Q11_7", "choice"] == "8"               # "Property damage"
