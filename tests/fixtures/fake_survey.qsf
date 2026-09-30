@@ -3,12 +3,19 @@
   "SurveyElements": [
     {"Element": "BL", "Payload": {}},
     {"Element": "SQ", "Payload": {"QuestionID": "QID10", "DataExportTag": "Q9", "QuestionType": "MC",
-      "Selector": "MAVR", "QuestionText": "Basement&nbsp;use? <b>Check all</b>"}},
+      "Selector": "MAVR", "QuestionText": "Basement&nbsp;use? <b>Check all</b>",
+      "Choices": {"1": {"Display": "Storage"}, "6": {"Display": "Other, please describe:", "TextEntry": "true"}}}},
     {"Element": "SQ", "Payload": {"QuestionID": "QID1", "DataExportTag": "", "QuestionType": "DB",
       "Selector": "TB", "QuestionText": "Welcome text"}},
     {"Element": "SQ", "Payload": {"QuestionID": "QID2", "DataExportTag": "", "QuestionType": "TE",
       "Selector": "ML", "QuestionText": "Enter the survey code"}},
     {"Element": "SQ", "Payload": {"QuestionID": "QID3", "DataExportTag": "Q1", "QuestionType": "MC",
-      "Selector": "SAVR", "QuestionText": "How long have you lived here?"}}
+      "Selector": "SAVR", "QuestionText": "How long have you lived here?",
+      "Choices": {"1": {"Display": "Less than 1 year"}, "2": {"Display": "21+ years"}},
+      "RecodeValues": {"2": "5"}}},
+    {"Element": "SQ", "Payload": {"QuestionID": "QID15", "DataExportTag": "Q11", "QuestionType": "Matrix",
+      "Selector": "Likert", "QuestionText": "How often?",
+      "Choices": {"1": {"Display": "Nuisance flooding"}, "9": {"Display": "Other, please describe:", "TextEntry": "true"}},
+      "Answers": {"1": {"Display": "Always"}, "5": {"Display": "Never"}}}}
   ]
 }

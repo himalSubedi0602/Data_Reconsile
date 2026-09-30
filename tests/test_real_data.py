@@ -44,3 +44,12 @@ def test_qsf_lists_all_32_questions():
     q = read_questions(CONFIG.raw_dir / "erc_flood_survey_definition.qsf")
     assert len(q) == 32                     # Q1–Q31 + the survey-code question
     assert q["export_tag"].is_unique
+
+
+def test_qsf_choices():
+    from recon.qsf import read_choices
+
+    c = read_choices(CONFIG.raw_dir / "erc_flood_survey_definition.qsf")
+    assert c["has_text"].sum() == 17        # "Other, please describe" style options
+    assert list(c[(c["qid"] == "QID24") & (c["kind"] == "scale")]["label"]) == [
+        "1 (Do Not Trust)", "2", "3", "4", "5 (Strongly Trust)", "Not Familiar"]
