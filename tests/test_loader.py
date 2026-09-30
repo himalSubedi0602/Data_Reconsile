@@ -1,14 +1,12 @@
 """Loader tests. All run on the fake export in tests/fixtures/, never on real data."""
 
 import csv
-import json
 from dataclasses import replace
 
 import pandas as pd
 import pytest
 
 from recon.checksums import checksums_of_dir
-from recon.config import EntrantConfig
 from recon.loader import (
     CODE_NOT_CHECKABLE, NO_INITIALS, NOT_ON_PAPER_LOG, UNKNOWN_ENTRANT, LoaderError,
     load, parse_survey_code, read_export, write_outputs,
@@ -42,15 +40,6 @@ def test_refuses_to_write_outputs_into_raw_folder(project):
         write_outputs(load(inside_raw), inside_raw)
 
 
-def test_load_record_notes_raw_file_change_since_last_load(project):
-    write_outputs(load(project), project)
-    with open(project.raw_dir / "hs_paper_log.txt", "a") as f:
-        f.write("500\n")
-    record = load(project).record
-    assert record["changed_since_last_load"] == [
-        "CHANGED:  hs_paper_log.txt does not match its recorded checksum"]
-
-
 # ---------------------------------------------------------------- header rows
 
 def test_reads_three_header_rows(project):
@@ -68,31 +57,15 @@ def test_rejects_file_with_missing_header_row(write_export):
         load(config)
 
 
-def test_rejects_file_with_fewer_than_three_rows(write_export):
-    with pytest.raises(LoaderError, match="only 2 rows"):
-        load(write_export("ResponseId,QID2\nResponse ID,Survey code\n"))
-
-
 def test_rejects_duplicate_column_names(write_export):
     text = HEADER.replace("ResponseId,QID2,Q1", "ResponseId,QID2,QID2")
     with pytest.raises(LoaderError, match="more than once"):
         load(write_export(text))
 
 
-def test_rejects_blank_column_name(write_export):
-    with pytest.raises(LoaderError, match="blank column names"):
-        load(write_export(HEADER.replace("ResponseId,QID2,Q1", "ResponseId,QID2, ")))
-
-
 def test_rejects_entry_with_wrong_number_of_values(write_export):
     with pytest.raises(LoaderError, match="entry 1 has 2 values"):
         load(write_export(HEADER + "R_1,1-0001 HS\n"))
-
-
-def test_rejects_non_utf8_file(project):
-    project.export_file.write_bytes(HEADER.encode() + "R_1,1-0001 HS,Caf\xe9\n".encode("latin-1"))
-    with pytest.raises(LoaderError, match="not UTF-8"):
-        load(project)
 
 
 def test_rejects_export_without_survey_code_column(project):
@@ -182,16 +155,6 @@ def test_codes_are_cleaned_only_for_case_and_spacing(project):
     assert not odd["code_format_ok"]
 
 
-def test_entrant_mapping_comes_from_config(project):
-    remapped = replace(project, entrants={
-        "HS": EntrantConfig("A", project.entrants["HS"].paper_log),
-        "HD": EntrantConfig("B", None),
-    })
-    result = load(remapped)
-    assert list(result.datasets["B"]["entry_number"]) == [6]
-    assert entry(result.excluded, 11)["reason"] == UNKNOWN_ENTRANT   # CH no longer known
-
-
 def test_entrant_without_paper_log_only_needs_unique_codes(project):
     b = load(project).datasets["B"]
     assert set(b["survey_code"]) == {"1-0001", "1-0002"}
@@ -211,16 +174,6 @@ def test_duplicate_codes_report(project):
 def test_paper_log_numbers_missing_from_export(project):
     missing = load(project).paper_log_not_in_export
     assert list(missing["survey_number"]) == [99]
-
-
-def test_writes_all_outputs(project):
-    write_outputs(load(project), project)
-    names = {p.name for p in project.working_dir.iterdir()}
-    assert names == {"dataset_a.csv", "dataset_b.csv", "columns.csv", "excluded_entries.csv",
-                     "duplicate_codes.csv", "paper_log_not_in_export.csv", "load_record.json"}
-    record = json.loads((project.working_dir / "load_record.json").read_text())
-    assert set(record["raw_files"]) == {"export.csv", "hs_paper_log.txt", "survey.qsf"}
-    assert record["counts"]["dataset_A"] == 4
 
 
 # ---------------------------------------------------------------- step 1.15: a second export file

@@ -41,7 +41,7 @@ def test_phase_1_loader_and_question_map():
     qmap = build_question_map(read_export(CONFIG.export_file)[0], read_questions(CONFIG.qsf_file),
                               read_choices(CONFIG.qsf_file), CONFIG.id_column)
     json.dumps(qmap)
-    assert (len(qmap["questions"]), len(qmap["columns"]), len(qmap["other_pairs"])) == (32, 173, 17)
+    assert (len(qmap["questions"]), len(qmap["columns"])) == (32, 173)
     roles = [c["role"] for c in qmap["columns"]]
     assert (roles.count("COMPARE"), roles.count("METADATA"), roles.count("IDENTIFIER")) == (155, 17, 1)
     q11_7 = next(c for c in qmap["columns"] if c["column"] == "Q11_7")

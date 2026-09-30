@@ -40,23 +40,6 @@ def assign_roles(linked: pd.DataFrame, id_column: str) -> pd.DataFrame:
     return out
 
 
-def other_pairs(linked: pd.DataFrame) -> pd.DataFrame:
-    """Each "Other" text-box column, with the column that says whether Other was picked.
-
-    other_code: the code in select_column that means Other (pick-one questions).
-    Blank means select_column is the option's own column (a tick-box or grid row).
-    """
-    answers = linked[~linked["is_text"] & (linked["qid"] != "")]
-    rows = []
-    for t in linked[linked["is_text"] & (linked["choice"] != "")].itertuples():
-        own = answers[(answers["qid"] == t.qid) & (answers["choice"] == t.choice)]
-        if len(own):
-            rows.append((t.column, own["column"].iloc[0], ""))
-        else:
-            rows.append((t.column, answers.loc[answers["qid"] == t.qid, "column"].iloc[0], t.choice))
-    return pd.DataFrame(rows, columns=["text_column", "select_column", "other_code"])
-
-
 def build_question_map(columns, questions, choices, id_column) -> dict:
     """Everything later steps need to know about the columns, as one JSON-ready dict."""
     linked = assign_roles(link_columns(columns), id_column)
@@ -76,7 +59,6 @@ def build_question_map(columns, questions, choices, id_column) -> dict:
     return {
         "columns": linked[["column", "qid", "choice", "is_text", "role"]].to_dict("records"),
         "questions": qmap,
-        "other_pairs": other_pairs(linked).to_dict("records"),
     }
 
 
@@ -117,8 +99,8 @@ def main():
     out.write_text(json.dumps(qmap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     review = config.working_dir / "questions_review.csv"
     review_table(qmap).to_csv(review, index=False, encoding="utf-8-sig")
-    print(f"Wrote {out} ({len(qmap['questions'])} questions, {len(qmap['columns'])} columns, "
-          f"{len(qmap['other_pairs'])} Other pairs) and {review}")
+    print(f"Wrote {out} ({len(qmap['questions'])} questions, {len(qmap['columns'])} columns) "
+          f"and {review}")
 
 
 if __name__ == "__main__":

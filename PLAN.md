@@ -63,7 +63,7 @@ Qualtrics export(s) ──► 1. Load & understand ──► 2. Add CH data ─�
 * Read the export with its three Qualtrics header rows, keeping every value exactly as entered.
 * Split entries by the initials at the end of the survey code (`HS` → A, `CH` → B).
 * Working set for A: codes that appear **exactly once** in Qualtrics **and** exactly once in the paper log (**416 surveys**). The rest are set aside with a reason; entries with no initials are ignored for now.
-* Build the question map from the `.qsf`: every column's question, option or grid row, role (`COMPARE` / `METADATA` / `IDENTIFIER`) and the 17 Other + text pairs. It stops if the export and `.qsf` don't line up.
+* Build the question map from the `.qsf`: every column's question, option or grid row, role (`COMPARE` / `METADATA` / `IDENTIFIER`). It stops if the export and `.qsf` don't line up.
 * Accept a separate coworker export: it must have exactly the same columns and internal IDs, and a response found in both files is kept once.
 
 ## Phase 2: Add the coworker's (`CH`) data

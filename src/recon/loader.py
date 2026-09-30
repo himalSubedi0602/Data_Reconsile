@@ -4,7 +4,7 @@ The loader only reads the raw files. It never changes, fixes or interprets an an
 every value is kept as the exact text in the export.
 
 Steps:
-  1. Fingerprint the raw files (SHA-256) and note any change since the last load.
+  1. Fingerprint the raw files (SHA-256).
   2. Read and check the three Qualtrics header rows.
   3. Read every value as text, exactly as entered.
   4. Label every entry with entry_number (its position in the export) and keep ResponseId.
@@ -29,7 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 import recon
-from recon.checksums import checksums_of_dir, compare, sha256_of
+from recon.checksums import checksums_of_dir, sha256_of
 from recon.config import DATASETS, DEFAULT_CONFIG, ProjectConfig, load_config
 
 HEADER_ROWS = 3  # Qualtrics: column name, question text, {"ImportId": ...}
@@ -248,8 +248,6 @@ def load(config: ProjectConfig) -> LoadResult:
     """Run steps 1–7 in memory. Nothing is written."""
     # Step 1: fingerprints
     raw_checksums = checksums_of_dir(config.raw_dir) if config.raw_dir.is_dir() else {}
-    previous = _previous_record(config)
-    changed = compare(previous.get("raw_files", {}), raw_checksums) if previous else []
 
     # Steps 2–4, for the main export and any extra ones (e.g. the coworker's)
     columns, data = read_export(config.export_file)
@@ -316,7 +314,6 @@ def load(config: ProjectConfig) -> LoadResult:
         "config_sha256": sha256_of(config.path) if config.path.is_file() else None,
         "export_files": [p.name for p in (config.export_file, *config.extra_export_files)],
         "raw_files": raw_checksums,
-        "changed_since_last_load": changed,
         "counts": {
             "entries_in_export": len(data),
             "repeated_responses_dropped": in_files - len(data),
@@ -341,14 +338,6 @@ def load(config: ProjectConfig) -> LoadResult:
             log_missing, columns=[ENTRANT, "survey_number", "times_on_paper_log"]),
         record=record,
     )
-
-
-def _previous_record(config: ProjectConfig) -> dict:
-    path = config.working_dir / "load_record.json"
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
 
 
 # ---------------------------------------------------------------- step 8
@@ -400,10 +389,6 @@ def main(argv=None) -> int:
         print(f"    {n:4d}  {r}")
     if c["code_format_flagged_in_A_or_B"]:
         print(f"  Codes in an unusual format (kept, flagged): {c['code_format_flagged_in_A_or_B']}")
-    if result.record["changed_since_last_load"]:
-        print("  WARNING: raw files changed since the last load:")
-        for line in result.record["changed_since_last_load"]:
-            print("    " + line)
     print(f"Outputs written to {config.working_dir}")
     return 0
 
