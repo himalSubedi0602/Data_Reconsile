@@ -31,6 +31,7 @@ class ProjectConfig:
     id_column: str             # column holding the survey code + entrant initials
     code_pattern: str          # regex a well-formed survey code matches (initials removed)
     entrants: dict[str, EntrantConfig]   # initials (upper case) -> settings
+    extra_export_files: tuple[Path, ...] = ()   # e.g. the coworker's own export
 
 
 def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
@@ -70,4 +71,5 @@ def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
         id_column=raw["id_column"],
         code_pattern=raw["code_pattern"],
         entrants=entrants,
+        extra_export_files=tuple(root / f for f in raw.get("extra_export_files", [])),
     )
