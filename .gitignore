@@ -4,6 +4,7 @@ data/
 output/
 reviews/
 *.qsf
+!tests/fixtures/*.qsf
 
 # Python
 __pycache__/
