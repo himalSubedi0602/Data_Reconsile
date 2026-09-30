@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from recon.qsf import read_choices, read_questions
 from recon.questions import (
@@ -67,3 +68,19 @@ def test_build_question_map_and_review_table():
     assert review.loc["Q9_1", "option"] == "Storage"
     assert review.loc["Q11_9_TEXT", "option"] == "Other, please describe:"
     assert review.loc["StartDate", "role"] == "METADATA"
+
+
+def test_build_question_map_stops_when_columns_and_qsf_dont_line_up():
+    qsf = FIXTURES / "fake_survey.qsf"
+    columns = pd.DataFrame({
+        "column":    ["QID2",      "Q1",   "Q1_copy", "Q9_3",  "Q99"],
+        "import_id": ["QID2_TEXT", "QID3", "QID3",    "QID10", "QID99"],
+        "choice_id": ["",          "",     "",        "3",     ""],
+    })
+    with pytest.raises(ValueError) as e:
+        build_question_map(columns, read_questions(qsf), read_choices(qsf), "QID2")
+    message = str(e.value)
+    assert "Q99: question QID99 is not in the .qsf" in message
+    assert "QID15 (Q11): has no column in the export" in message
+    assert "Q9_3: option 3 is not an option of QID10" in message
+    assert "Q1_copy: another column holds the same answer" in message

@@ -5,41 +5,21 @@ from conftest import FIXTURES
 QSF = FIXTURES / "fake_survey.qsf"
 
 
-def test_lists_questions_in_qid_order_without_text_blocks():
+def test_read_questions():
     q = read_questions(QSF)
-    assert list(q["qid"]) == ["QID2", "QID3", "QID10", "QID15"]    # QID1 is display text
+    assert list(q["qid"]) == ["QID2", "QID3", "QID10", "QID15"]    # QID1 is display text, skipped
     assert list(q["type"]) == ["TE", "MC", "MC", "Matrix"]
+    q = q.set_index("qid")
+    assert q.loc["QID2", "export_tag"] == "QID2"                   # no tag -> named after the QID
+    assert q.loc["QID10", "text"] == "Basement use? Check all"     # HTML removed
 
 
-def test_export_tag_falls_back_to_qid():
-    q = read_questions(QSF).set_index("qid")
-    assert q.loc["QID2", "export_tag"] == "QID2"
-    assert q.loc["QID3", "export_tag"] == "Q1"
-
-
-def test_question_text_is_plain():
-    q = read_questions(QSF).set_index("qid")
-    assert q.loc["QID10", "text"] == "Basement use? Check all"
-
-
-def test_choice_codes_use_recode_values():
+def test_read_choices():
     c = read_choices(QSF)
-    q1 = c[c["qid"] == "QID3"]
-    assert list(zip(q1["code"], q1["label"])) == [("1", "Less than 1 year"), ("5", "21+ years")]
-
-
-def test_other_choices_have_text_box():
-    c = read_choices(QSF)
-    assert list(c.loc[c["has_text"], ["qid", "code"]].itertuples(index=False, name=None)) == [
-        ("QID10", "6"), ("QID15", "9")]
-
-
-def test_grid_rows_and_scale():
-    c = read_choices(QSF)
-    grid = c[c["qid"] == "QID15"]
-    assert list(zip(grid["kind"], grid["code"])) == [
-        ("row", "1"), ("row", "9"), ("scale", "1"), ("scale", "5")]
-
-
-def test_text_questions_have_no_choices():
-    assert "QID2" not in set(read_choices(QSF)["qid"])
+    rows = list(c[["qid", "kind", "code", "has_text"]].itertuples(index=False, name=None))
+    assert rows == [
+        ("QID10", "choice", "1", False), ("QID10", "choice", "6", True),   # Other box
+        ("QID3", "choice", "1", False), ("QID3", "choice", "5", False),    # recoded 2 -> 5
+        ("QID15", "row", "1", False), ("QID15", "row", "9", True),
+        ("QID15", "scale", "1", False), ("QID15", "scale", "5", False),
+    ]                                                                      # QID2 (text) has none

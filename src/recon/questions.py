@@ -70,11 +70,31 @@ def build_question_map(columns, questions, choices, id_column) -> dict:
             if len(options):
                 entry[key] = dict(zip(options["code"], options["label"]))
         qmap[q.qid] = entry
+    problems = _coverage_problems(linked, qmap)
+    if problems:
+        raise ValueError("Export columns and .qsf don't line up:\n  " + "\n  ".join(problems))
     return {
         "columns": linked[["column", "qid", "choice", "is_text", "role"]].to_dict("records"),
         "questions": qmap,
         "other_pairs": other_pairs(linked).to_dict("records"),
     }
+
+
+def _coverage_problems(linked: pd.DataFrame, qmap: dict) -> list[str]:
+    """Each answer column must be exactly one known part of a known question,
+    and each question must have at least one column."""
+    answers = linked[linked["qid"] != ""]
+    problems = [f"{c}: question {q} is not in the .qsf"
+                for c, q in zip(answers["column"], answers["qid"]) if q not in qmap]
+    problems += [f"{q} ({e['tag']}): has no column in the export"
+                 for q, e in qmap.items() if q not in set(answers["qid"])]
+    for c in answers[answers["choice"] != ""].itertuples():
+        q = qmap.get(c.qid, {})
+        if c.choice not in {**q.get("choices", {}), **q.get("rows", {})}:
+            problems.append(f"{c.column}: option {c.choice} is not an option of {c.qid}")
+    repeated = answers[answers.duplicated(["qid", "choice", "is_text"], keep=False)]
+    problems += [f"{c}: another column holds the same answer" for c in repeated["column"]]
+    return problems
 
 
 def review_table(qmap: dict) -> pd.DataFrame:
