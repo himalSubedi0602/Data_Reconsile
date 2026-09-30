@@ -15,9 +15,11 @@ def project(tmp_path) -> ProjectConfig:
     raw.mkdir()
     shutil.copy(FIXTURES / "fake_export.csv", raw / "export.csv")
     shutil.copy(FIXTURES / "fake_paper_log.txt", raw / "hs_paper_log.txt")
+    shutil.copy(FIXTURES / "fake_survey.qsf", raw / "survey.qsf")
     return ProjectConfig(
         path=tmp_path / "project.json",
         export_file=raw / "export.csv",
+        qsf_file=raw / "survey.qsf",
         raw_dir=raw,
         working_dir=tmp_path / "working",
         id_column="QID2",

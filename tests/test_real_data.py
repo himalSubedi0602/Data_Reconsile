@@ -86,3 +86,16 @@ def test_column_roles():
 
     roles = assign_roles(link_columns(read_export(CONFIG.export_file)[0]), CONFIG.id_column)
     assert roles["role"].value_counts().to_dict() == {"COMPARE": 155, "METADATA": 17, "IDENTIFIER": 1}
+
+
+def test_question_map_is_complete_and_saveable():
+    import json
+
+    from recon.loader import read_export
+    from recon.qsf import read_choices, read_questions
+    from recon.questions import build_question_map
+
+    qmap = build_question_map(read_export(CONFIG.export_file)[0], read_questions(CONFIG.qsf_file),
+                              read_choices(CONFIG.qsf_file), CONFIG.id_column)
+    json.dumps(qmap)
+    assert (len(qmap["questions"]), len(qmap["columns"]), len(qmap["other_pairs"])) == (32, 173, 17)

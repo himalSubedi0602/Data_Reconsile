@@ -1,6 +1,11 @@
 import pandas as pd
 
-from recon.questions import assign_roles, link_columns, other_pairs
+from recon.qsf import read_choices, read_questions
+from recon.questions import (
+    assign_roles, build_question_map, link_columns, other_pairs, review_table,
+)
+
+from conftest import FIXTURES
 
 
 def test_link_columns():
@@ -40,3 +45,25 @@ def test_assign_roles():
         "choice_id": ["",          "",          ""],
     }))
     assert list(assign_roles(linked, "QID2")["role"]) == ["METADATA", "IDENTIFIER", "COMPARE"]
+
+
+def test_build_question_map_and_review_table():
+    qsf = FIXTURES / "fake_survey.qsf"
+    columns = pd.DataFrame({
+        "column":    ["StartDate", "QID2",      "Q1",   "Q9_1",  "Q9_6",  "Q9_6_TEXT",    "Q11_9",   "Q11_9_TEXT"],
+        "import_id": ["startDate", "QID2_TEXT", "QID3", "QID10", "QID10", "QID10_6_TEXT", "QID15_9", "QID15_9_TEXT"],
+        "choice_id": ["",          "",          "",     "1",     "6",     "",             "",        ""],
+    })
+    qmap = build_question_map(columns, read_questions(qsf), read_choices(qsf), "QID2")
+    q = qmap["questions"]
+    assert {k: v["kind"] for k, v in q.items()} == {
+        "QID2": "text", "QID3": "single_choice", "QID10": "check_all", "QID15": "grid"}
+    assert q["QID3"]["choices"] == {"1": "Less than 1 year", "5": "21+ years"}
+    assert q["QID15"]["rows"] == {"1": "Nuisance flooding", "9": "Other, please describe:"}
+    assert q["QID15"]["scale"] == {"1": "Always", "5": "Never"}
+    assert len(qmap["other_pairs"]) == 2
+
+    review = review_table(qmap).set_index("column")
+    assert review.loc["Q9_1", "option"] == "Storage"
+    assert review.loc["Q11_9_TEXT", "option"] == "Other, please describe:"
+    assert review.loc["StartDate", "role"] == "METADATA"
