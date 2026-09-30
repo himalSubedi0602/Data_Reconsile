@@ -65,3 +65,16 @@ def test_every_question_column_links_to_a_qsf_question():
     assert (linked["qid"] == "").sum() == 17                  # Qualtrics metadata columns
     assert set(linked.loc[linked["qid"] != "", "qid"]) == qids
     assert linked.loc["Q11_7", "choice"] == "8"               # "Property damage"
+
+
+def test_other_pairs_match_qsf_text_boxes():
+    from recon.loader import read_export
+    from recon.qsf import read_choices
+    from recon.questions import link_columns, other_pairs
+
+    linked = link_columns(read_export(CONFIG.export_file)[0])
+    pairs = other_pairs(linked).merge(linked, left_on="text_column", right_on="column")
+    choices = read_choices(CONFIG.raw_dir / "erc_flood_survey_definition.qsf")
+    boxes = choices[choices["has_text"]]
+    assert set(zip(pairs["qid"], pairs["choice"])) == set(zip(boxes["qid"], boxes["code"]))
+    assert len(pairs) == 17

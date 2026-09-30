@@ -1,6 +1,6 @@
 import pandas as pd
 
-from recon.questions import link_columns
+from recon.questions import link_columns, other_pairs
 
 
 def test_link_columns():
@@ -17,3 +17,17 @@ def test_link_columns():
     assert tuple(linked.loc["Q9_4", ["qid", "choice", "is_text"]]) == ("QID12", "4", False)
     # Grid column names don't follow the row IDs: Q11_7 is row 8.
     assert tuple(linked.loc["Q11_7", ["qid", "choice", "is_text"]]) == ("QID15", "8", False)
+
+
+def test_other_pairs():
+    linked = link_columns(pd.DataFrame({
+        "column":    ["QID2",      "Q2",   "Q2_4_TEXT",   "Q9_6",  "Q9_6_TEXT",    "Q11_9",   "Q11_9_TEXT"],
+        "import_id": ["QID2_TEXT", "QID4", "QID4_4_TEXT", "QID12", "QID12_6_TEXT", "QID15_9", "QID15_9_TEXT"],
+        "choice_id": ["",          "",     "",            "6",     "",             "",        ""],
+    }))
+    pairs = other_pairs(linked)
+    assert list(pairs.itertuples(index=False, name=None)) == [
+        ("Q2_4_TEXT", "Q2", "4"),        # pick-one: Other picked when Q2 == 4
+        ("Q9_6_TEXT", "Q9_6", ""),       # tick-box: the option's own column
+        ("Q11_9_TEXT", "Q11_9", ""),     # grid: the "Other" row's rating
+    ]                                    # QID2 is a text question, not an Other box
