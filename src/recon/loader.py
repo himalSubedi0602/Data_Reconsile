@@ -35,11 +35,12 @@ from recon.config import DATASETS, DEFAULT_CONFIG, ProjectConfig, load_config
 HEADER_ROWS = 3  # Qualtrics: column name, question text, {"ImportId": ...}
 
 # Columns the loader adds in front of the original export columns.
-ENTRY_NUMBER = "entry_number"
+ENTRY_NUMBER = "entry_number"   # position within its export file
+SOURCE_FILE = "source_file"
 SURVEY_CODE = "survey_code"
 ENTRANT = "entrant"
 CODE_FORMAT_OK = "code_format_ok"
-LOADER_COLUMNS = [ENTRY_NUMBER, SURVEY_CODE, ENTRANT, CODE_FORMAT_OK]
+LOADER_COLUMNS = [ENTRY_NUMBER, SOURCE_FILE, SURVEY_CODE, ENTRANT, CODE_FORMAT_OK]
 
 # Reasons an entry is left out of A and B.
 NO_INITIALS = "NO_INITIALS"
@@ -217,6 +218,30 @@ def _duplicate_codes(entries: pd.DataFrame, answer_columns: list[str],
         "Finished", "fields_differing_from_first_entry", "times_on_paper_log"])
 
 
+# ---------------------------------------------------------------- step 1.15: several exports
+
+def structure_problems(first: pd.DataFrame, other: pd.DataFrame) -> list[str]:
+    """Differences between two exports' columns: missing, extra, or a different internal ID."""
+    a, b = list(first["column"]), list(other["column"])
+    problems = [f"missing column: {c}" for c in a if c not in b]
+    problems += [f"extra column: {c}" for c in b if c not in a]
+    ids = ["column", "import_id", "choice_id"]
+    for r in first[ids].merge(other[ids], on="column", suffixes=("", "_2")).itertuples():
+        if (r.import_id, r.choice_id) != (r.import_id_2, r.choice_id_2):
+            problems.append(f"{r.column}: internal ID differs ({r.import_id} vs {r.import_id_2})")
+    return problems
+
+
+def _drop_repeated_responses(data: pd.DataFrame) -> pd.DataFrame:
+    """A response found in two export files is kept once. The same ResponseId with
+    different answers stops the load."""
+    unique = data.drop_duplicates([c for c in data.columns if c not in (ENTRY_NUMBER, SOURCE_FILE)])
+    clash = unique.loc[unique["ResponseId"].duplicated(), "ResponseId"]
+    if len(clash):
+        raise LoaderError(f"Same ResponseId with different answers in two files: {sorted(set(clash))}")
+    return unique.reset_index(drop=True)
+
+
 # ---------------------------------------------------------------- whole load
 
 def load(config: ProjectConfig) -> LoadResult:
@@ -226,17 +251,28 @@ def load(config: ProjectConfig) -> LoadResult:
     previous = _previous_record(config)
     changed = compare(previous.get("raw_files", {}), raw_checksums) if previous else []
 
-    # Steps 2–4
+    # Steps 2–4, for the main export and any extra ones (e.g. the coworker's)
     columns, data = read_export(config.export_file)
+    data.insert(1, SOURCE_FILE, config.export_file.name)
+    for path in config.extra_export_files:
+        more_columns, more = read_export(path)
+        problems = structure_problems(columns, more_columns)
+        if problems:
+            raise LoaderError(f"{path.name} doesn't have the same columns as "
+                              f"{config.export_file.name}:\n  " + "\n  ".join(problems))
+        more.insert(1, SOURCE_FILE, path.name)
+        data = pd.concat([data, more], ignore_index=True)
     if config.id_column not in data.columns:
         raise LoaderError(f"Survey-code column {config.id_column!r} is not in the export.")
+    in_files = len(data)
+    data = _drop_repeated_responses(data)
 
     # Step 5
     parsed = data[config.id_column].map(parse_survey_code)
-    data.insert(1, SURVEY_CODE, parsed.str[0])
-    data.insert(2, ENTRANT, parsed.str[1])
+    data.insert(2, SURVEY_CODE, parsed.str[0])
+    data.insert(3, ENTRANT, parsed.str[1])
     pattern = re.compile(config.code_pattern)
-    data.insert(3, CODE_FORMAT_OK, data[SURVEY_CODE].map(lambda c: bool(pattern.match(c))))
+    data.insert(4, CODE_FORMAT_OK, data[SURVEY_CODE].map(lambda c: bool(pattern.match(c))))
 
     # Steps 6–7
     reason = pd.Series("", index=data.index, dtype=object)
@@ -278,11 +314,12 @@ def load(config: ProjectConfig) -> LoadResult:
         "pandas": pd.__version__,
         "config_file": config.path.as_posix(),
         "config_sha256": sha256_of(config.path) if config.path.is_file() else None,
-        "export_file": config.export_file.name,
+        "export_files": [p.name for p in (config.export_file, *config.extra_export_files)],
         "raw_files": raw_checksums,
         "changed_since_last_load": changed,
         "counts": {
             "entries_in_export": len(data),
+            "repeated_responses_dropped": in_files - len(data),
             "columns_in_export": len(columns),
             "entries_by_initials": {k or "(none)": int(v) for k, v in
                                     data[ENTRANT].value_counts().sort_index().items()},

@@ -1,5 +1,6 @@
 """Loader tests. All run on the fake export in tests/fixtures/, never on real data."""
 
+import csv
 import json
 from dataclasses import replace
 
@@ -220,3 +221,49 @@ def test_writes_all_outputs(project):
     record = json.loads((project.working_dir / "load_record.json").read_text())
     assert set(record["raw_files"]) == {"export.csv", "hs_paper_log.txt", "survey.qsf"}
     assert record["counts"]["dataset_A"] == 4
+
+
+# ---------------------------------------------------------------- step 1.15: a second export file
+
+def _second_export(project, rows):
+    """Write a coworker-style export (same 3 header rows as the fake export) into raw/."""
+    with open(project.export_file, newline="", encoding="utf-8") as f:
+        header = list(csv.reader(f))[:3]
+    path = project.raw_dir / "coworker.csv"
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(header + rows)
+    return replace(project, extra_export_files=(path,)), header
+
+
+FIRST_ENTRY = ["2026-01-01 10:00:00", "R_fake01", "2026-01-01 10:05:00", "1", "1-0001 HS",
+               "05", "1", "", "1", "N/A"]
+
+
+def test_second_export_is_checked_and_combined(project):
+    new_ch = ["2026-01-02 09:00:00", "R_fake20", "2026-01-02 09:05:00", "1", "1-0003 CH",
+              "3", "2", "", "", ""]
+    config, header = _second_export(project, [FIRST_ENTRY, new_ch])   # a copy of entry 1 + a new CH entry
+    result = load(config)
+    b = result.datasets["B"]
+    assert list(b["survey_code"]) == ["1-0001", "1-0002", "1-0003"]
+    new = b.set_index("survey_code").loc["1-0003"]
+    assert (new["source_file"], new["entry_number"]) == ("coworker.csv", 2)   # traceable to its file
+    assert list(result.datasets["A"]["survey_code"]) == ["1-0001", "1-0002", "1-0003", "1-0004"]
+    assert result.record["counts"]["repeated_responses_dropped"] == 1    # the copy of entry 1
+
+    # Different columns: the load stops and lists every difference.
+    header[2][5] = '{"ImportId":"QID99"}'                                # Q1 has another ID
+    wrong = [row[:-1] for row in header]                                 # Q13 missing
+    with open(config.extra_export_files[0], "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(wrong)
+    with pytest.raises(LoaderError) as e:
+        load(config)
+    assert "missing column: Q13" in str(e.value)
+    assert "Q1: internal ID differs (QID3 vs QID99)" in str(e.value)
+
+
+def test_same_response_with_different_answers_stops_the_load(project):
+    changed = FIRST_ENTRY[:5] + ["2"] + FIRST_ENTRY[6:]                  # same ResponseId, Q1 differs
+    config, _ = _second_export(project, [changed])
+    with pytest.raises(LoaderError, match="Same ResponseId with different answers.*R_fake01"):
+        load(config)
