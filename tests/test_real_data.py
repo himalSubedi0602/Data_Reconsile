@@ -34,9 +34,9 @@ def test_phase_1_loader_and_question_map():
     from recon.questions import build_question_map
 
     counts = load(CONFIG).record["counts"]
-    assert counts["entries_by_initials"] == {"(none)": 175, "HS": 554}
-    assert (counts["dataset_A"], counts["dataset_B"]) == (416, 0)
-    assert counts["excluded"] - counts["excluded_by_reason"]["NO_INITIALS"] == 138   # HS set aside
+    assert counts["entries_by_initials"] == {"(none)": 177, "CH": 337, "HS": 554}
+    assert (counts["dataset_A"], counts["dataset_B"]) == (416, 335)
+    assert counts["excluded"] - counts["excluded_by_reason"]["NO_INITIALS"] == 140   # 138 HS + 2 CH set aside
 
     qmap = build_question_map(read_export(CONFIG.export_file)[0], read_questions(CONFIG.qsf_file),
                               read_choices(CONFIG.qsf_file), CONFIG.id_column)

@@ -2,7 +2,9 @@
   "algorithm": "sha256",
   "files": {
     "erc_flood_qualtrics_export_2026-09-28.csv": "9f4e6335b9fe805f304db29163f3dcf4dac697b40fb868cbb8693edfb8e779e0",
+    "erc_flood_qualtrics_export_ch_2026-09-30.csv": "9e517dfa9f9f4301db75af192e1448390fd74d743b758fde7571b780d1f2a5c1",
     "erc_flood_survey_definition.qsf": "4998802910f64ebeeb2c1bf1c12d805b5e582065ba341eab44f16fae96c5b7e0",
+    "erc_flood_survey_definition_ch.qsf": "8ea07579d0ee23afd1efb2ce04ac87e695a85d701eaba12a03d499680a0400ae",
     "hs_paper_log.txt": "faa141eca294de47e979dd6ccff1b41610df54fc87150077b45997a50bbb76e0"
   }
 }
