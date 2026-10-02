@@ -118,6 +118,7 @@ def test_output_files_round_trip_exactly(project):
     ("1-0836", ("1-0836", "")),
     ("1-0836 CH", ("1-0836", "CH")),
     ("10619 HS", ("10619", "HS")),       # odd format: kept as written
+    ("1-1606-CH", ("1-1606", "CH")),     # hyphen before the initials (coworker's format)
     ("", ("", "")),
 ])
 def test_parse_survey_code(raw, expected):
@@ -178,10 +179,14 @@ def test_paper_log_numbers_missing_from_export(project):
 
 # ---------------------------------------------------------------- step 1.15: a second export file
 
-def _second_export(project, rows):
-    """Write a coworker-style export (same 3 header rows as the fake export) into raw/."""
+def _second_export(project, rows, extra_column=None):
+    """Write a coworker-style export (same 3 header rows as the fake export) into raw/,
+    optionally with one extra column (name, text, ImportId) whose value is "x"."""
     with open(project.export_file, newline="", encoding="utf-8") as f:
         header = list(csv.reader(f))[:3]
+    if extra_column:
+        header = [h + [e] for h, e in zip(header, extra_column)]
+        rows = [r + ["x"] for r in rows]
     path = project.raw_dir / "coworker.csv"
     with open(path, "w", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(header + rows)
@@ -193,9 +198,11 @@ FIRST_ENTRY = ["2026-01-01 10:00:00", "R_fake01", "2026-01-01 10:05:00", "1", "1
 
 
 def test_second_export_is_checked_and_combined(project):
-    new_ch = ["2026-01-02 09:00:00", "R_fake20", "2026-01-02 09:05:00", "1", "1-0003 CH",
+    new_ch = ["2026-01-02 09:00:00", "R_fake20", "2026-01-02 09:05:00", "1", "1-0003-CH",
               "3", "2", "", "", ""]
-    config, header = _second_export(project, [FIRST_ENTRY, new_ch])   # a copy of entry 1 + a new CH entry
+    # A copy of entry 1 + a new CH entry, plus an extra Qualtrics metadata column (allowed, dropped).
+    extra = ("Last Seen Question IDs", "Last Seen Question IDs", '{"ImportId":"LastSeenQuestions"}')
+    config, header = _second_export(project, [FIRST_ENTRY, new_ch], extra)
     result = load(config)
     b = result.datasets["B"]
     assert list(b["survey_code"]) == ["1-0001", "1-0002", "1-0003"]
@@ -203,10 +210,16 @@ def test_second_export_is_checked_and_combined(project):
     assert (new["source_file"], new["entry_number"]) == ("coworker.csv", 2)   # traceable to its file
     assert list(result.datasets["A"]["survey_code"]) == ["1-0001", "1-0002", "1-0003", "1-0004"]
     assert result.record["counts"]["repeated_responses_dropped"] == 1    # the copy of entry 1
+    assert "Last Seen Question IDs" not in b.columns
+
+    # An extra *answer* column is not allowed.
+    config, _ = _second_export(project, [new_ch], ("Q99", "Q99", '{"ImportId":"QID99"}'))
+    with pytest.raises(LoaderError, match="extra column: Q99"):
+        load(config)
 
     # Different columns: the load stops and lists every difference.
     header[2][5] = '{"ImportId":"QID99"}'                                # Q1 has another ID
-    wrong = [row[:-1] for row in header]                                 # Q13 missing
+    wrong = [row[:-2] for row in header]                                 # Q13 (and the extra) missing
     with open(config.extra_export_files[0], "w", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(wrong)
     with pytest.raises(LoaderError) as e:

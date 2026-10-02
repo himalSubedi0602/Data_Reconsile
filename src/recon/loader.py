@@ -50,8 +50,8 @@ NOT_ON_PAPER_LOG = "NOT_ON_PAPER_LOG"
 REPEATED_ON_PAPER_LOG = "REPEATED_ON_PAPER_LOG"
 CODE_NOT_CHECKABLE = "CODE_FORMAT_NOT_CHECKABLE_AGAINST_PAPER_LOG"
 
-# Survey code, then optional spacing, then the entrant's initials at the very end.
-CODE_AND_INITIALS = re.compile(r"^(?P<code>.*\d)\s*(?P<initials>[A-Za-z]+)$")
+# Survey code, then an optional hyphen (1-0836-CH), then the entrant's initials at the very end.
+CODE_AND_INITIALS = re.compile(r"^(?P<code>.*\d)-?(?P<initials>[A-Za-z]+)$")
 
 
 class LoaderError(Exception):
@@ -221,10 +221,12 @@ def _duplicate_codes(entries: pd.DataFrame, answer_columns: list[str],
 # ---------------------------------------------------------------- step 1.15: several exports
 
 def structure_problems(first: pd.DataFrame, other: pd.DataFrame) -> list[str]:
-    """Differences between two exports' columns: missing, extra, or a different internal ID."""
-    a, b = list(first["column"]), list(other["column"])
-    problems = [f"missing column: {c}" for c in a if c not in b]
-    problems += [f"extra column: {c}" for c in b if c not in a]
+    """Differences between two exports' columns: missing, extra, or a different internal ID.
+    Extra Qualtrics metadata columns (ImportId not QID...) are allowed; they are dropped."""
+    a = list(first["column"])
+    problems = [f"missing column: {c}" for c in a if c not in set(other["column"])]
+    problems += [f"extra column: {c}" for c, i in zip(other["column"], other["import_id"])
+                 if c not in a and i.startswith("QID")]
     ids = ["column", "import_id", "choice_id"]
     for r in first[ids].merge(other[ids], on="column", suffixes=("", "_2")).itertuples():
         if (r.import_id, r.choice_id) != (r.import_id_2, r.choice_id_2):
@@ -258,6 +260,7 @@ def load(config: ProjectConfig) -> LoadResult:
         if problems:
             raise LoaderError(f"{path.name} doesn't have the same columns as "
                               f"{config.export_file.name}:\n  " + "\n  ".join(problems))
+        more = more[[c for c in data.columns if c != SOURCE_FILE]]   # drop extra metadata columns
         more.insert(1, SOURCE_FILE, path.name)
         data = pd.concat([data, more], ignore_index=True)
     if config.id_column not in data.columns:

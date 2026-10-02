@@ -1,6 +1,6 @@
 {
   "export_file": "data/raw/erc_flood_qualtrics_export_2026-09-28.csv",
-  "extra_export_files": [],
+  "extra_export_files": ["data/raw/erc_flood_qualtrics_export_ch_2026-09-30.csv"],
   "qsf_file": "data/raw/erc_flood_survey_definition.qsf",
   "raw_dir": "data/raw",
   "working_dir": "data/working",
