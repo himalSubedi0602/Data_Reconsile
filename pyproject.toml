@@ -7,7 +7,7 @@ name = "recon"
 version = "0.1.0"
 description = "Double-data-entry reconciliation for Qualtrics exports"
 requires-python = ">=3.11"
-dependencies = ["pandas>=2.2"]
+dependencies = ["pandas>=2.2", "openpyxl>=3.1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
