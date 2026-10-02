@@ -29,12 +29,11 @@ Survey data is **not** in this repository. Put the raw files in `data/raw/` (see
 ```bash
 .venv/bin/python -m recon.loader            # load the export(s) → data/working/
 .venv/bin/python -m recon.questions         # build the question map → config/questions.json
+.venv/bin/python -m recon.compare           # list every disagreement → data/working/differences.xlsx
 .venv/bin/python -m recon.checksums verify  # check the raw files are unchanged
 .venv/bin/python -m recon.checksums update  # record fingerprints after adding a new raw file
 .venv/bin/python -m pytest -q               # run the tests
 ```
-
-The comparison step (`differences.xlsx`) is added next.
 
 ## Outputs
 
@@ -43,6 +42,7 @@ The comparison step (`differences.xlsx`) is added next.
 | `data/working/dataset_a.csv`, `dataset_b.csv` | Each person's entries used for the comparison |
 | `data/working/excluded_entries.csv` | Entries set aside, with the reason |
 | `data/working/load_record.json` | Raw-file fingerprints and counts for each load |
+| `data/working/differences.xlsx` | One row per disagreement (both answers, both ResponseIds), plus surveys entered by only one person |
 | `config/questions.json` | What every column means (not in Git: contains the survey wording) |
 
 ## Tech
