@@ -1,11 +1,12 @@
 # Data Reconcile
 
-Python scripts that clean the double-entered **ERC Flood Survey** data (Qualtrics) and produce a
-final dataset for analysis in R.
+Python scripts that find every disagreement in the double-entered **ERC Flood Survey** data
+(Qualtrics).
 
 Each paper survey was typed into Qualtrics twice, by two people. The scripts compare the two
-entries, list every disagreement for the team to resolve against the paper survey, and build the
-final dataset from the agreed answers and the team's corrections. Raw data is never modified.
+entries and list every disagreement. The team checks each one against the paper survey and fixes
+the wrong entry directly in Qualtrics, where the analysis is also done. The scripts never modify
+the raw data.
 
 See [PLAN.md](PLAN.md) for the full plan.
 
@@ -33,7 +34,7 @@ Survey data is **not** in this repository. Put the raw files in `data/raw/` (see
 .venv/bin/python -m pytest -q               # run the tests
 ```
 
-More steps (comparison, final dataset) are added as the cleanup progresses.
+The comparison step (`differences.xlsx`) is added next.
 
 ## Outputs
 
@@ -46,4 +47,4 @@ More steps (comparison, final dataset) are added as the cleanup progresses.
 
 ## Tech
 
-Python · pandas · pytest · Qualtrics CSV exports · R (for the analysis)
+Python · pandas · pytest · Qualtrics CSV exports
