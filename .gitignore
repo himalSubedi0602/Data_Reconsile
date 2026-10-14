@@ -4,7 +4,13 @@ data/
 output/
 reviews/
 *.qsf
-!tests/fixtures/*.qsf
+# Any data file anywhere in the project, not only in data/ (fake test files excepted)
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.zip
+!tests/fixtures/*
 # Contains survey wording; regenerate with: python -m recon.questions
 config/questions.json
 
