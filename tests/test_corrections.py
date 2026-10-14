@@ -55,3 +55,47 @@ def test_export_writes_one_corrected_row_per_done_survey(tmp_path):
     assert len(rows) == 4
 
     assert p.random_check(tmp_path / "check.xlsx", seed=1) == ["1-0001"]
+
+
+def test_edge_cases(tmp_path):
+    grid = {"tag": "Q11", "kind": "grid", "text": "How often?", "rows": {"8": "Property damage"},
+            "scale": {"1": "Always", "5": "Never"}}
+    qmap = {"questions": {**QMAP["questions"], "QID15": grid}, "columns": [
+        {"column": "QID2", "qid": "QID2", "choice": "", "is_text": True, "role": "IDENTIFIER"},
+        {"column": "Q11_7", "qid": "QID15", "choice": "8", "is_text": False, "role": "COMPARE"},
+        {"column": "Q13", "qid": "QID42", "choice": "", "is_text": True, "role": "COMPARE"}]}
+    header = pd.DataFrame({"column": ["QID2", "Q11_7", "Q13"], "question_text": ["Code", "Damage", "Details"],
+                           "import_id": ["QID2_TEXT", "QID15_8", "QID42_TEXT"], "choice_id": ["", "", ""]})
+    hs = pd.DataFrame({"survey_code": ["1-0001"], "ResponseId": ["R_a1"], "Q11_7": ["1"], "Q13": [""]}).set_index("survey_code")
+    ch = pd.DataFrame({"survey_code": ["1-0001", "1-0009"], "ResponseId": ["R_b1", "R_b9"],
+                       "Q11_7": ["5", "5"], "Q13": ["", ""]}).set_index("survey_code")
+    make = lambda: Project(config=object(), qmap=qmap, entries={"HS": hs, "CH": ch}, store=tmp_path, wj={}, header=header)
+    p = make()
+
+    # A survey only Caleb typed can't be built from "HS": no silent all-blank record.
+    with pytest.raises(ValueError, match="not entered by 'HS'"):
+        p.record("1-0009", "HS")
+    with pytest.raises(ValueError, match="not entered by 'HS'"):
+        p.set_status("1-0009", "HS", "done")
+
+    # Grid: only scale codes are valid.
+    assert p.options("Q11_7") == ["", "1", "5"]
+    with pytest.raises(ValueError, match="not a valid answer"):
+        p.save("1-0001", "HS", {"Q11_7": "8", "Q13": ""})
+
+    tricky = 'Café, "2nd" floor\nwater; 100%'
+    p.save("1-0001", "HS", {"Q11_7": "5", "Q13": tricky})
+    p.set_status("1-0001", "HS", "done")
+
+    # Closing and reopening the tool: a fresh start reads the saved corrections.
+    p = make()
+    assert p.record("1-0001", "HS") == {"Q11_7": "5", "Q13": tricky}
+
+    # Commas, quotes, line breaks and accents survive the CSV exactly; the grid row lands in its column.
+    p.export(tmp_path / "out.csv")
+    with open(tmp_path / "out.csv", newline="", encoding="utf-8") as f:
+        assert list(csv.reader(f))[3] == ["1-0001", "5", tricky]
+
+    # Editing a survey that was done puts it back to "in progress" (must be checked and marked done again).
+    p.save("1-0001", "HS", {"Q11_7": "1", "Q13": tricky})
+    assert p.surveys().set_index("survey_code").loc["1-0001", "status"] == "in progress"

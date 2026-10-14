@@ -90,6 +90,7 @@ class Project:
 
     def record(self, code: str, start: str) -> dict:
         """The corrected answers: the starting entry plus the saved changes (latest per column)."""
+        self._check_start(code, start)
         values = {col: self.value(start, code, col) for col in self.columns}
         for row in self._rows(self.store / "changes.csv", _CHANGES):
             if row["survey_code"] == code and row["start"] == start:
@@ -111,6 +112,7 @@ class Project:
 
     def set_status(self, code: str, start: str, status: str):
         assert status in STATUSES
+        self._check_start(code, start)
         now = datetime.now().isoformat(timespec="seconds")
         self._append(self.store / "status.csv", _STATUS, [[now, code, start, status]])
 
@@ -161,6 +163,11 @@ class Project:
                 ws.column_dimensions[col].width = w
             ws.freeze_panes = "A2"
         return picked
+
+    def _check_start(self, code: str, start: str):
+        """Refuse to build a record from an entry that doesn't exist (it would be all blank)."""
+        if start not in self.entries or code not in self.entries[start].index:
+            raise ValueError(f"Survey {code} was not entered by {start!r}")
 
     # ------------------------------------------------------------ storage (append-only CSVs)
 

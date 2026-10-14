@@ -31,9 +31,14 @@ FILTERS = {
 }
 with st.sidebar:
     st.header("Surveys")
-    shown = surveys[FILTERS[st.selectbox("Show", list(FILTERS))]]
+    find = st.text_input("Find a survey code (searches all surveys)", placeholder="e.g. 1436 or 3-2621")
+    if find.strip():
+        shown = surveys[surveys["survey_code"].str.contains(find.strip(), regex=False)]
+    else:
+        shown = surveys[FILTERS[st.selectbox("Show", list(FILTERS))]]
     st.caption(f"{len(shown)} surveys · {(shown['status'] == 'done').sum()} done")
     if shown.empty:
+        st.info("No survey matches." if find.strip() else "No surveys in this list.")
         st.stop()
     labels = {r.survey_code: f"{r.survey_code}  ·  {r.entered_by}  ·  ⚠ {r.differences}"
               + (f"  ⚑ {r.wj}" if r.wj else "") + f"  ·  {r.status}" for r in shown.itertuples()}
@@ -42,7 +47,7 @@ with st.sidebar:
         st.session_state["survey"] = codes[0]
     if st.button("Next survey →", use_container_width=True):
         st.session_state["survey"] = codes[(codes.index(st.session_state["survey"]) + 1) % len(codes)]
-    code = st.selectbox("Survey (type to search)", codes, key="survey", format_func=labels.get)
+    code = st.selectbox("Pick a survey from the list", codes, key="survey", format_func=labels.get)
 
     st.divider()
     st.subheader("Results")
