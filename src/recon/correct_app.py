@@ -3,6 +3,8 @@
     .venv/bin/streamlit run src/recon/correct_app.py
 """
 
+from datetime import date
+
 import streamlit as st
 
 from recon.corrections import STATUSES, Project
@@ -41,6 +43,18 @@ with st.sidebar:
     if st.button("Next survey →", use_container_width=True):
         st.session_state["survey"] = codes[(codes.index(st.session_state["survey"]) + 1) % len(codes)]
     code = st.selectbox("Survey (type to search)", codes, key="survey", format_func=labels.get)
+
+    st.divider()
+    st.subheader("Results")
+    done, open_ = (surveys["status"] == "done").sum(), (surveys["status"] == "in progress").sum()
+    st.caption(f"{done} surveys done · {open_} in progress (not exported until marked done)")
+    name = st.text_input("Name for the files", f"round1_{date.today()}")
+    if st.button("Export corrected CSV (done surveys)", use_container_width=True):
+        n = p.export(p.store / f"corrected_{name}.csv")
+        st.success(f"Wrote {n} surveys to data/corrections/corrected_{name}.csv")
+    if st.button("Make random check sheet (10 surveys)", use_container_width=True):
+        picked = p.random_check(p.store / f"random_check_{name}.xlsx")
+        st.success(f"Picked {', '.join(picked)} → data/corrections/random_check_{name}.xlsx")
 
 # ------------------------------------------------------------ right: the survey
 info = surveys.set_index("survey_code").loc[code]
