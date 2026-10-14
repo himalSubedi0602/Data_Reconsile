@@ -30,6 +30,7 @@ Survey data is **not** in this repository. Put the raw files in `data/raw/` (see
 .venv/bin/python -m recon.loader            # load the export(s) → data/working/
 .venv/bin/python -m recon.questions         # build the question map → config/questions.json
 .venv/bin/python -m recon.compare           # list every disagreement → data/working/differences.xlsx
+.venv/bin/streamlit run src/recon/correct_app.py   # open the correction tool in the browser
 .venv/bin/python -m recon.checksums verify  # check the raw files are unchanged
 .venv/bin/python -m recon.checksums update  # record fingerprints after adding a new raw file
 .venv/bin/python -m pytest -q               # run the tests

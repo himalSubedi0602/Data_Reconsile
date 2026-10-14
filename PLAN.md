@@ -1,34 +1,27 @@
-# data_reconcile: Data Cleanup Plan
+# data_reconcile: Correction Plan
 
 ## 1. Objective
 
-Find every disagreement between the two entries of the double-entered **ERC Flood Survey**, so the team can fix the wrong entries in Qualtrics.
+Produce **one correct record for every survey** of the **ERC Flood Survey**, checked against the original paper, and deliver it as a **CSV in Qualtrics answer codes (values)** for analysis in Qualtrics or R.
 
-The same paper surveys were typed into Qualtrics twice, by two people:
+The paper surveys were typed into Qualtrics twice:
 
 * **Dataset A** = entries by Himal (survey code ends in `HS`)
-* **Dataset B** = entries by Caleb (survey code ends in `CH`)
+* **Dataset B** = entries by Caleb (survey code ends in `CH`, in his own copy of the survey)
 
-The scripts compare the two entries of each survey and produce:
+Some responses were also filled out **online by participants** themselves (no initials).
 
-```text
-differences.xlsx    one row per disagreement: survey code, question, both answers, both ResponseIds
-```
-
-The team checks each disagreement against the paper survey and **fixes the wrong entry directly in Qualtrics**. Qualtrics then holds the clean data, and the analysis is done **in Qualtrics** (by Whitney).
-
-This is a **one-off cleanup for this project**, done with a few short Python scripts. It is not a general-purpose tool.
+The work is done with a **correction tool** that opens any survey, shows both entries side by side, and lets the corrector fix the record to match the paper. Julia's three validation checks are built into the plan.
 
 ---
 
 # 2. Principles
 
-* Raw data is **never modified** by the scripts. Raw files are read-only and fingerprinted (SHA-256). Corrections happen only in Qualtrics, by a person.
-* Fields where both entries agree are accepted as entered.
-* Harmless differences (extra spaces, capitalization) count as agreement and are never listed.
-* **Every real disagreement is decided by a person**, using the paper survey. No script picks a value.
-* Unclear entries (repeated codes, missing initials, etc.) are **set aside with a reason**, never silently dropped or merged.
-* Every step can be re-run and gives the same result.
+* **The paper survey decides every answer.** When the paper itself is unclear, the **W&J decisions** (team workbook) apply; new cases go to Julia and Whitney and are added there.
+* The original Qualtrics exports are **never modified**. Each corrected record is rebuilt from the chosen entry plus the recorded changes.
+* **Every change is recorded**: survey, question, old value, new value, time.
+* Only **valid answer options** can be entered, so no impossible codes.
+* Unclear survey codes are **never guessed**; they are resolved by the team.
 * Participant data is never committed to Git.
 
 ---
@@ -36,93 +29,86 @@ This is a **one-off cleanup for this project**, done with a few short Python scr
 # 3. Data
 
 ```text
-data/
-├── raw/                                           ← read-only originals (not in Git)
-│   ├── erc_flood_qualtrics_export_2026-09-28.csv  ← main Qualtrics export
-│   ├── <Caleb's export>.csv                       ← CH entries, if exported separately
-│   ├── erc_flood_survey_definition.qsf            ← survey structure
-│   └── hs_paper_log.txt                           ← Himal's paper log of survey numbers
-└── working/                                       ← everything generated (not in Git)
+data/raw/                                          ← read-only originals (not in Git)
+├── erc_flood_qualtrics_export_2026-09-28.csv      ← main export: Himal's entries + online responses
+├── erc_flood_qualtrics_export_ch_2026-10-12.csv   ← Caleb's entries (complete)
+├── erc_flood_qualtrics_export_ch_2026-09-30.csv   ← Caleb's earlier export (kept as record)
+├── erc_flood_survey_definition.qsf / _ch.qsf      ← survey structure
+├── hs_paper_log.txt                               ← Himal's paper log
+└── envelope_data_record_2026-10-14.xlsx           ← team workbook: Master list, tracking logs, W&J decisions
+data/working/                                      ← generated reports (not in Git)
+data/corrections/                                  ← correction log + CSVs per round (not in Git)
 ```
-
-* Exports use **numeric values**, with multi-value fields **split into columns**.
-* `config/questions.json` (the question map) is also kept out of Git, because it contains the survey wording.
-* After fixes are made in Qualtrics, a **new export** is added to `data/raw/` with its own name; earlier exports are kept unchanged as the record of what was entered.
 
 ---
 
-# 4. Workflow
+# 4. What is already done
 
-```text
-Qualtrics export(s) ──► 1. Load & understand ──► 2. Add Caleb's data ──► 3. Compare HS vs CH
-        ▲                                                                       │
-        │                                                                       ▼
-        └──── export again ◄──── 4. Team fixes the entries in Qualtrics ◄── differences.xlsx
-```
-
-Re-running the comparison on a new export confirms the fixes: every fixed disagreement disappears, and an empty list means the two entries agree everywhere.
-
-## Phase 1: Load & understand ✅
-
-* Read the export with its three Qualtrics header rows, keeping every value exactly as entered.
-* Split entries by the initials at the end of the survey code (`HS` → A, `CH` → B).
-* Working set for A: codes that appear **exactly once** in Qualtrics **and** exactly once in the paper log (**416 surveys**). The rest are set aside with a reason; entries with no initials are ignored for now.
-* Build the question map from the `.qsf`: every column's question, option or grid row, and role (`COMPARE` / `METADATA` / `IDENTIFIER`). It stops if the export and `.qsf` don't line up.
-* Accept a separate export for Caleb's entries: it must have exactly the same columns and internal IDs, and a response found in both files is kept once.
-
-## Phase 2: Add Caleb's (`CH`) data
-
-* Put Caleb's CSV in `data/raw/`, make it read-only, list it in `config/project.json`, and record its fingerprint.
-* Run the loader and check how many `CH` entries there are and how many are set aside.
-* Caleb's entries arrive in batches; each new file repeats this phase.
-
-## Phase 3: Compare
-
-* Pair surveys entered by **both** people (by survey code). List surveys only one person entered.
-* Compare every `COMPARE` column; harmless differences count as a match.
-* Write **`differences.xlsx`**: one row per disagreement, with the survey code, question, answer labels, both values, and both **ResponseIds** (to find the entries in Qualtrics).
-
-## Phase 4: Fix in Qualtrics (team)
-
-* Check each disagreement against the paper survey and fix the wrong entry directly in Qualtrics.
-* Export again and re-run the comparison to confirm no disagreements remain.
-* Decide what to do with the set-aside and no-initials codes (see the Survey Summary tab in the team's master workbook).
-
-## On hold
-
-* A final dataset + codebook built by script: not needed while corrections are made in Qualtrics.
+* **Load & understand:** both exports read exactly as entered; entries split by initials; unclear entries set aside with a reason; every column's question, options and role known (question map from the `.qsf`).
+* **Compare:** for every survey typed by both people, every answer compared. Result (Oct 12): **408 surveys compared, 116 match completely, 292 have 896 disagreements**. Reports: `differences.xlsx`, `survey_problems.xlsx`.
 
 ---
 
-# 5. Testing
+# 5. The correction tool
 
-Tests only cover mistakes that would **silently give wrong results**:
+1. **Find any survey**: search by code or browse lists of all surveys (entered by Himal, Caleb, both, or online by participants), with markers for: flagged by the comparison, flagged by W&J, and status (not started / in progress / done).
+2. **Open a survey**: laid out like the paper questionnaire, pre-filled. For **every question both entries are shown side by side** (Himal's and Caleb's); questions where they differ are highlighted, and matching answers are shown too, so a shared mistake can still be caught. W&J decisions appear next to the question they apply to. If only one entry exists, that entry is shown.
+3. **Correct**: pick the entry most in line with the paper, then change any answer to match the paper: another option, tick/untick boxes, change a grid rating, edit or clear text, or clear any answer.
+4. **Save** every change to the log; **mark the survey done** once checked against the paper. Work can stop and resume any time.
+5. **Create a CSV**: one record per finished survey, numeric answer codes, in Qualtrics' import layout. Not created while a survey in it is unfinished.
+
+---
+
+# 6. Order of work
+
+| Round | Surveys | Result |
+|---|---|---|
+| **1** | Codes **not repeated**, flagged by the comparison or by W&J (**306**) | CSV after round 1 |
+| **2** | Codes **repeated** during entry (after discussing with Julia and Whitney how to separate them) | CSV after round 2 |
+| **3** | All remaining surveys entered by Himal or Caleb that were **never opened or flagged** | CSV after round 3 |
+| **4** | **Participants' online responses** | **Final CSV with all the data** |
+
+Each round's CSV contains every survey finished so far, so it grows round by round; the CSV after round 4 is the complete dataset.
+
+---
+
+# 7. Validation (requested by Julia)
+
+| # | When | How |
+|---|---|---|
+| **1. Survey list** | Before correcting | Compare all surveys with the **Master** tab and **both tracking logs** in the team workbook; report missing, extra, repeated or mistyped codes; spot-check a few paper surveys; team sign-off before correcting starts. |
+| **2. Corrections vs paper** | After each round | **10 surveys picked at random** (including some never flagged); each one's final answers printed in words and checked against the paper by Himal; any mistake → fix it and check 10 more. |
+| **3. Import** | After the final CSV | Import into a **copy** of the survey in Qualtrics (a few test responses first), export again and compare automatically with the final CSV (**zero differences**); a few surveys checked by eye. |
+
+---
+
+# 8. Stages
+
+1. Validation 1 (survey list) and team sign-off
+2. Build the correction tool; try it on a few real surveys
+3. Round 1 → Validation 2 → CSV
+4. Round 2 → Validation 2 → CSV
+5. Round 3 → Validation 2 → CSV
+6. Round 4 → Validation 2 → **final CSV**
+7. Validation 3 (import into a Qualtrics copy)
+8. Hand over for analysis (Qualtrics or R); keep the originals, the correction log, the CSVs and the validation results
+
+---
+
+# 9. Testing
+
+Tests cover only what could silently give wrong data:
 
 * raw files changing (checksum check before every push)
-* codes being reformatted, or values being changed on load
-* a real disagreement being treated as a match (it would never reach the team)
-
-Tests use small fake files in `tests/fixtures/`. Tests on the real data run only locally (the data is never on GitHub).
+* values being changed or codes reformatted on load
+* a real disagreement being treated as a match
+* a correction landing in the wrong survey or question, or an untouched answer changing in the CSV
+* an invalid answer code being written
 
 ---
 
-# 6. Git workflow
+# 10. Git workflow
 
-* One branch and one pull request per phase; GitHub Actions runs the tests on every push.
+* One branch and one pull request per stage; GitHub Actions runs the tests on every push.
 * A pre-push hook runs all tests, including the raw-data checksum check, and blocks the push if any fail.
-
----
-
-# 7. Open decisions (for the team)
-
-* **Which entries the analysis in Qualtrics uses.** After the fixes, every survey is still in Qualtrics twice (Himal's and Caleb's entries), plus the no-initials and repeated entries. The analysis must count each survey once.
-* The 63 repeated `HS` survey codes (two surveys sharing a code, or a duplicate entry?)
-* The 10 `HS` codes in Qualtrics but not in the paper log, the 6 paper-log numbers not in Qualtrics, and `1-1052` (twice in the paper log, once in Qualtrics)
-* The 168 codes entered without initials
-* Entry conventions with Caleb: initials at the end of every code (` CH`), "N/A" only when the respondent wrote it, how to enter illegible writing or two boxes ticked on a one-answer question
-
----
-
-# 8. Possible later work
-
-A general reconciliation tool for other surveys may be built later as a **separate project**, reusing the loader and question map from this one.
+* No survey data, CSV or Excel file is ever committed (`.gitignore`).

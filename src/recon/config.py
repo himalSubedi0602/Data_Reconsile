@@ -32,6 +32,7 @@ class ProjectConfig:
     code_pattern: str          # regex a well-formed survey code matches (initials removed)
     entrants: dict[str, EntrantConfig]   # initials (upper case) -> settings
     extra_export_files: tuple[Path, ...] = ()   # e.g. the coworker's own export
+    workbook_file: Path | None = None           # team workbook (W&J decisions)
 
 
 def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
@@ -72,4 +73,5 @@ def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
         code_pattern=raw["code_pattern"],
         entrants=entrants,
         extra_export_files=tuple(root / f for f in raw.get("extra_export_files", [])),
+        workbook_file=root / raw["workbook_file"] if raw.get("workbook_file") else None,
     )
