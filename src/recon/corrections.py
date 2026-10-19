@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from recon.compare import _label, compare, same_text
+from recon.compare import _label, _plain, compare, same_text
 from recon.config import load_config
 from recon.loader import load, read_export
 
@@ -23,16 +23,20 @@ _STATUS = ["time", "survey_code", "start", "status"]
 
 
 class Project:
-    def __init__(self, config=None, qmap=None, entries=None, store=None, wj=None, header=None):
+    def __init__(self, config=None, qmap=None, entries=None, store=None, wj=None, header=None, excluded=None):
         """Load everything once. The keyword arguments let tests pass small fake data instead."""
         self.config = config or load_config()
         # The export's 3 header rows (name, question text, ImportId), used to lay out the CSV.
         self.header = header if header is not None else read_export(self.config.export_file)[0]
         self.qmap = qmap or json.loads((self.config.path.parent / "questions.json").read_text(encoding="utf-8"))
         if entries is None:
-            datasets = load(self.config).datasets
+            result = load(self.config)
             names = {e.dataset: i for i, e in self.config.entrants.items()}       # "A" -> "HS"
-            entries = {names[d]: df.set_index("survey_code") for d, df in datasets.items()}
+            entries = {names[d]: df.set_index("survey_code") for d, df in result.datasets.items()}
+            excluded = result.excluded
+        # Every entry with its survey code, including the ones set aside (for the "Entries" box).
+        used = [e.reset_index().assign(entrant=n, reason="") for n, e in entries.items()]
+        self.all_entries = pd.concat(used + ([excluded] if excluded is not None else []), ignore_index=True)
         self.entries = entries                                                     # "HS"/"CH" -> table by code
         self.names = tuple(entries)
         self.store = Path(store or self.config.working_dir.parent / "corrections")
@@ -75,6 +79,19 @@ class Project:
 
     def disagree(self, code: str, column: str) -> bool:
         return column in self.differences.get(code, ())
+
+    def related_entries(self, code: str) -> pd.DataFrame:
+        """Every entry with the same survey number (e.g. 1-0897 and 1-0897-1661), used or set aside."""
+        base = (m.group(1) if (m := re.match(r"(\d+-\d{4})(?!\d)", code)) else code)
+        e = self.all_entries[self.all_entries["survey_code"].str.startswith(base)]
+        who = e["entrant"].replace("", "no initials")
+        if "source_file" in e:
+            who = who.where(~((e["entrant"] == "") & ~e["source_file"].str.contains("_ch_")), "online participant")
+        return pd.DataFrame({
+            "Survey code": e["survey_code"], "Typed as": e.get("QID2", e["survey_code"]), "Entered by": who,
+            "Recorded": e.get("RecordedDate", ""),
+            "In the tool": e["reason"].map(lambda r: "used" if not r else ("no initials" if r == "NO_INITIALS" else _plain(r))),
+        }).sort_values(["Survey code", "Entered by"]).reset_index(drop=True)
 
     def difference_notes(self, code: str) -> pd.DataFrame:
         """One row per question where the two entries disagree, with the kind of difference."""

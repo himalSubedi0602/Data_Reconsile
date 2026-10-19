@@ -83,6 +83,14 @@ by_system, by_wj = info["differences"] > 0, bool(p.wj.get(code))
 flagged = {(True, True): "the **system** (HS and CH disagree) **and W&J**", (True, False): "the **system** only (HS and CH disagree)",
            (False, True): "**W&J** only", (False, False): "nobody: HS and CH agree and there is no W&J decision"}[by_system, by_wj]
 st.info(f"**Flagged by:** {flagged}")
+related = p.related_entries(code)
+counts = ", ".join(f"{w} ×{n}" for w, n in related["Entered by"].value_counts().items())
+several = len(related) > len(available) or related["Survey code"].nunique() > 1
+(st.warning if several else st.success)(
+    f"**Entries with this survey number ({len(related)}):** {counts}"
+    + (": more than one paper may share this number, or an entry is set aside" if several else ""))
+if several:
+    st.table(related.set_index("Survey code"))
 if by_system:
     st.error(f"⚠ **System: {info['differences']} answer(s) where HS and CH disagree**: check these on the paper")
     st.table(p.difference_notes(code).set_index("Question"))
