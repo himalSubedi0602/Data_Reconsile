@@ -25,6 +25,7 @@ def _project(tmp_path):
 def test_changes_land_in_the_right_place_and_nothing_else_changes(tmp_path):
     p = _project(tmp_path)
     assert p.disagree("1-0001", "Q1") and not p.disagree("1-0001", "Q13")
+    assert list(p.related_entries("1-0001")["Entered by"]) == ["CH", "HS"]
     notes = p.difference_notes("1-0001")
     assert list(zip(notes["Question"], notes["HS"], notes["CH"], notes["Difference"])) == [
         ("Q1", "2 = 1-5 years", "3 = 6-10 years", "Different answer")]
