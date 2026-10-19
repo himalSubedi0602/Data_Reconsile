@@ -53,8 +53,6 @@ with st.sidebar:
     codes = list(labels)
     if st.session_state.get("survey") not in codes:
         st.session_state["survey"] = codes[0]
-    if st.button("Next survey →", use_container_width=True):
-        st.session_state["survey"] = codes[(codes.index(st.session_state["survey"]) + 1) % len(codes)]
     code = st.selectbox("Pick a survey from the list", codes, key="survey", format_func=labels.get)
 
     st.divider()
