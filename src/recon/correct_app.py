@@ -3,8 +3,10 @@
     .venv/bin/streamlit run src/recon/correct_app.py
 """
 
+import re
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from recon.corrections import STATUSES, Project
@@ -31,14 +33,20 @@ FILTERS = {
 }
 with st.sidebar:
     st.header("Surveys")
-    find = st.text_input("Find a survey code (searches all surveys)", placeholder="e.g. 1436 or 3-2621")
+    shown = surveys[FILTERS[st.selectbox("Show", list(FILTERS), index=list(FILTERS).index("All surveys"))]]
+    # Survey number = the 4 digits after the location: 1-0235 -> 235 (typo codes: "All numbers" only).
+    number = surveys["survey_code"].map(lambda c: int(m.group(1)) if (m := re.match(r"\d+-(\d{4})(?!\d)", c)) else -1)
+    ranges = {"All numbers": (-1, 10**9)} | {
+        f"{0 if i == 0 else i * 200 + 1}–{(i + 1) * 200}": (0 if i == 0 else i * 200 + 1, (i + 1) * 200)
+        for i in range(number.max() // 200 + 1)}
+    low, high = ranges[st.selectbox("Survey numbers", list(ranges))]
+    shown = shown[number[shown.index].between(low, high)]
+    find = st.text_input("Find a survey code (within the list above)", placeholder="e.g. 1436 or 3-2621")
     if find.strip():
-        shown = surveys[surveys["survey_code"].str.contains(find.strip(), regex=False)]
-    else:
-        shown = surveys[FILTERS[st.selectbox("Show", list(FILTERS))]]
+        shown = shown[shown["survey_code"].str.contains(find.strip(), regex=False)]
     st.caption(f"{len(shown)} surveys · {(shown['status'] == 'done').sum()} done")
     if shown.empty:
-        st.info("No survey matches." if find.strip() else "No surveys in this list.")
+        st.info("No survey matches these filters.")
         st.stop()
     labels = {r.survey_code: f"{r.survey_code}  ·  {r.entered_by}  ·  ⚠ {r.differences}"
               + (f"  ⚑ {r.wj}" if r.wj else "") + f"  ·  {r.status}" for r in shown.itertuples()}
@@ -73,8 +81,10 @@ if info["start"]:
 else:
     start = st.radio("Start from the entry closest to the paper:", available, horizontal=True)
 
-for hint in [h for h in p.wj.get(code, []) if not h["tag"]]:
-    st.warning(f"⚑ W&J: {hint['question']} → {hint['rule']} {hint['notes']}")
+if p.wj.get(code):
+    st.warning(f"⚑ **W&J decisions for this survey ({len(p.wj[code])})**: apply these when correcting")
+    st.table(pd.DataFrame(p.wj[code]).rename(columns={
+        "tag": "Question", "question": "Issue noted", "rule": "Decision", "notes": "Notes"}).set_index("Question"))
 
 current = p.record(code, start)
 new = {}
