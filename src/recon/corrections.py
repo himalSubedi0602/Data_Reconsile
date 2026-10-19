@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from recon.compare import _label, compare
+from recon.compare import _label, compare, same_text
 from recon.config import load_config
 from recon.loader import load, read_export
 
@@ -75,6 +75,29 @@ class Project:
 
     def disagree(self, code: str, column: str) -> bool:
         return column in self.differences.get(code, ())
+
+    def difference_notes(self, code: str) -> pd.DataFrame:
+        """One row per question where the two entries disagree, with the kind of difference."""
+        rows = []
+        for q, cols in self.questions():
+            for c in cols:
+                col = c["column"]
+                if not self.disagree(code, col):
+                    continue
+                a, b = (self.value(n, code, col) for n in self.names)
+                nopunct = lambda s: " ".join(re.sub(r"[^\w\s]", " ", same_text(s)).split())
+                if "" in (a, b):
+                    kind = f"Left blank by {self.names[(a != '') * 1]}"
+                elif c["is_text"]:
+                    kind = "Only punctuation differs" if nopunct(a) == nopunct(b) else "Text written differently"
+                elif q["kind"] == "grid":
+                    kind = "Different rating"
+                else:
+                    kind = "Different answer"
+                option = {**q.get("choices", {}), **q.get("rows", {})}.get(c["choice"], "")
+                rows.append({"Question": q["tag"], "Option / row": option,
+                             self.names[0]: self.label(col, a), self.names[1]: self.label(col, b), "Difference": kind})
+        return pd.DataFrame(rows, columns=["Question", "Option / row", *self.names, "Difference"])
 
     def options(self, column: str) -> list[str]:
         """Valid codes for a choice column, blank first ([] for text columns)."""

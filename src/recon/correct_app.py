@@ -79,7 +79,14 @@ if info["start"]:
 else:
     start = st.radio("Start from the entry closest to the paper:", available, horizontal=True)
 
-if p.wj.get(code):
+by_system, by_wj = info["differences"] > 0, bool(p.wj.get(code))
+flagged = {(True, True): "the **system** (HS and CH disagree) **and W&J**", (True, False): "the **system** only (HS and CH disagree)",
+           (False, True): "**W&J** only", (False, False): "nobody: HS and CH agree and there is no W&J decision"}[by_system, by_wj]
+st.info(f"**Flagged by:** {flagged}")
+if by_system:
+    st.error(f"⚠ **System: {info['differences']} answer(s) where HS and CH disagree**: check these on the paper")
+    st.table(p.difference_notes(code).set_index("Question"))
+if by_wj:
     st.warning(f"⚑ **W&J decisions for this survey ({len(p.wj[code])})**: apply these when correcting")
     st.table(pd.DataFrame(p.wj[code]).rename(columns={
         "tag": "Question", "question": "Issue noted", "rule": "Decision", "notes": "Notes"}).set_index("Question"))
