@@ -19,7 +19,12 @@ def _project(tmp_path):
                            "choice_id": ["", "", "1", "", "", ""]})
     qmap = {**QMAP, "columns": QMAP["columns"] + [
         {"column": "QID2", "qid": "QID2", "choice": "", "is_text": True, "role": "IDENTIFIER"}]}
-    return Project(config=object(), qmap=qmap, entries=entries, store=tmp_path, wj={}, header=header)
+    excluded = pd.DataFrame({"survey_code": ["1-0003", "1-0003"], "entrant": ["HS", "HS"], "ResponseId": ["R_a3", "R_a4"],
+                             "RecordedDate": ["2026-09-09 13:27", "2026-09-16 13:57"], "Q1": ["2", "3"],
+                             "Q9_1": ["", ""], "Q9_6_TEXT": ["", ""], "Q13": ["", ""],
+                             "reason": ["REPEATED_IN_EXPORT(2x)"] * 2})
+    return Project(config=object(), qmap=qmap, entries=entries, store=tmp_path, wj={}, header=header,
+                   excluded=excluded)
 
 
 def test_changes_land_in_the_right_place_and_nothing_else_changes(tmp_path):
@@ -30,6 +35,16 @@ def test_changes_land_in_the_right_place_and_nothing_else_changes(tmp_path):
     assert list(zip(notes["Question"], notes["HS"], notes["CH"], notes["Difference"])) == [
         ("Q1", "2 = 1-5 years", "3 = 6-10 years", "Different answer")]
     assert p.surveys().set_index("survey_code").loc["1-0002", "entered_by"] == "HS"
+    # A code typed twice (both entries set aside) can still be corrected, from either entry.
+    assert p.surveys().set_index("survey_code").loc["1-0003", "entered_by"] == "HS ×2"
+    assert p.record("1-0003", "HS 2026-09-16 13:57")["Q1"] == "3"
+    # The other paper with that code gets its own code, corrected from the same entries; kept on reopening.
+    with pytest.raises(ValueError, match="must be 1-0003"):
+        p.add_code("1-0004-2", "1-0003")
+    p.add_code("1-0003-2", "1-0003")
+    with pytest.raises(ValueError, match="already exists"):
+        p.add_code("1-0003-2", "1-0003")
+    assert _project(tmp_path).record("1-0003-2", "HS 2026-09-09 13:27")["Q1"] == "2"
 
     new = p.record("1-0001", "HS") | {"Q1": "3", "Q13": ""}          # correct Q1, clear Q13
     assert p.save("1-0001", "HS", new) == 2
