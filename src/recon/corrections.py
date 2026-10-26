@@ -20,6 +20,7 @@ from recon.loader import load, read_export
 STATUSES = ("not started", "in progress", "done")
 _CHANGES = ["time", "survey_code", "start", "column", "old", "new"]
 _STATUS = ["time", "survey_code", "start", "status"]
+_NEW_CODES = ["time", "new_code", "from_code"]
 
 
 class Project:
@@ -39,7 +40,16 @@ class Project:
         self.all_entries = pd.concat(used + ([excluded] if excluded is not None else []), ignore_index=True)
         self.entries = entries                                                     # "HS"/"CH" -> table by code
         self.names = tuple(entries)
+        # Every HS/CH entry a survey can be corrected from, used or set aside: code -> {start: row}.
+        # The start is "HS", or "HS <recorded time>" when that person typed the code more than once.
+        self.starts = {}
+        for n in self.names:
+            for code, g in self.all_entries[self.all_entries["entrant"] == n].groupby("survey_code"):
+                for _, r in g.iterrows():
+                    self.starts.setdefault(code, {})[n if len(g) == 1 else f"{n} {r['RecordedDate']}"] = r
         self.store = Path(store or self.config.working_dir.parent / "corrections")
+        for row in self._rows(self.store / "new_codes.csv", _NEW_CODES):          # second papers, own code
+            self.starts[row["new_code"]] = self.starts[row["from_code"]]
         self.columns = {c["column"]: c for c in self.qmap["columns"] if c["role"] == "COMPARE"}
         self.wj = wj if wj is not None else _read_wj(self.config.workbook_file)
         a, b = (entries[n].reset_index() for n in self.names)
@@ -48,14 +58,15 @@ class Project:
     # ------------------------------------------------------------ what's on screen
 
     def surveys(self) -> pd.DataFrame:
-        """One row per survey code entered by either person."""
-        codes = sorted(set().union(*(e.index for e in self.entries.values())))
+        """One row per survey code entered by either person, used or set aside ("HS ×2 + CH" = typed more than once)."""
         status = self._latest(self.store / "status.csv", _STATUS)
         rows = []
-        for code in codes:
+        for code in sorted(self.starts):
             s = status.get(code, {})
+            who = [start.split()[0] for start in self.starts[code]]
             rows.append({"survey_code": code,
-                         "entered_by": " + ".join(n for n in self.names if code in self.entries[n].index),
+                         "entered_by": " + ".join(n + (f" ×{who.count(n)}" if who.count(n) > 1 else "")
+                                                  for n in self.names if n in who),
                          "differences": len(self.differences.get(code, ())),
                          "wj": len(self.wj.get(code, ())),
                          "start": s.get("start", ""), "status": s.get("status", "not started")})
@@ -68,10 +79,10 @@ class Project:
             groups.setdefault(c["qid"], []).append(c)
         return [(self.qmap["questions"][qid], cols) for qid, cols in groups.items()]
 
-    def value(self, name: str, code: str, column: str) -> str:
-        """One person's original entry for one column ("" if they didn't enter this survey)."""
-        e = self.entries[name]
-        return e.at[code, column] if code in e.index else ""
+    def value(self, start: str, code: str, column: str) -> str:
+        """One entry's original answer for one column ("" if there is no such entry)."""
+        row = self.starts.get(code, {}).get(start)
+        return "" if row is None else row[column]
 
     def label(self, column: str, value: str) -> str:
         c = self.columns[column]
@@ -82,7 +93,7 @@ class Project:
 
     def related_entries(self, code: str) -> pd.DataFrame:
         """Every entry with the same survey number (e.g. 1-0897 and 1-0897-1661), used or set aside."""
-        base = (m.group(1) if (m := re.match(r"(\d+-\d{4})(?!\d)", code)) else code)
+        base = _number(code)
         e = self.all_entries[self.all_entries["survey_code"].str.startswith(base)]
         who = e["entrant"].replace("", "no initials")
         if "source_file" in e:
@@ -92,6 +103,18 @@ class Project:
             "Recorded": e.get("RecordedDate", ""),
             "In the tool": e["reason"].map(lambda r: "used" if not r else ("no initials" if r == "NO_INITIALS" else _plain(r))),
         }).sort_values(["Survey code", "Entered by"]).reset_index(drop=True)
+
+    def add_code(self, new_code: str, from_code: str):
+        """Give another paper that shares from_code its own code (e.g. 3-2756-2). It is corrected from
+        the same typed entries and exported under the new code."""
+        new_code = new_code.strip()
+        if new_code in self.starts:
+            raise ValueError(f"{new_code} already exists")
+        if _number(new_code) != _number(from_code) or new_code == _number(new_code):
+            raise ValueError(f"{new_code} must be {_number(from_code)} with something added at the end, e.g. {from_code}-2")
+        self._append(self.store / "new_codes.csv", _NEW_CODES,
+                     [[datetime.now().isoformat(timespec="seconds"), new_code, from_code]])
+        self.starts[new_code] = self.starts[from_code]
 
     def difference_notes(self, code: str) -> pd.DataFrame:
         """One row per question where the two entries disagree, with the kind of difference."""
@@ -206,7 +229,7 @@ class Project:
 
     def _check_start(self, code: str, start: str):
         """Refuse to build a record from an entry that doesn't exist (it would be all blank)."""
-        if start not in self.entries or code not in self.entries[start].index:
+        if start not in self.starts.get(code, {}):
             raise ValueError(f"Survey {code} was not entered by {start!r}")
 
     # ------------------------------------------------------------ storage (append-only CSVs)
@@ -233,6 +256,11 @@ class Project:
         for row in self._rows(path, header):
             latest[row["survey_code"]] = row
         return latest
+
+
+def _number(code: str) -> str:
+    """The survey number part of a code: 1-0897-1661 -> 1-0897."""
+    return m.group(1) if (m := re.match(r"(\d+-\d{4})(?!\d)", code)) else code
 
 
 def _read_wj(path) -> dict:

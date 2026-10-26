@@ -51,6 +51,8 @@ with st.sidebar:
     labels = {r.survey_code: f"{r.survey_code}  ·  {r.entered_by}  ·  ⚠ {r.differences}"
               + (f"  ⚑ {r.wj}" if r.wj else "") + f"  ·  {r.status}" for r in shown.itertuples()}
     codes = list(labels)
+    if "go_to" in st.session_state:                       # jump to a survey just given its own code
+        st.session_state["survey"] = st.session_state.pop("go_to")
     if st.session_state.get("survey") not in codes:
         st.session_state["survey"] = codes[0]
     code = st.selectbox("Pick a survey from the list", codes, key="survey", format_func=labels.get)
@@ -69,7 +71,8 @@ with st.sidebar:
 
 # ------------------------------------------------------------ right: the survey
 info = surveys.set_index("survey_code").loc[code]
-available = [n for n in p.names if n in info["entered_by"]]
+available = list(p.starts[code])                         # every HS/CH entry with this code, used or set aside
+compared = sorted(available) == sorted(p.names)           # exactly one entry each: HS and CH were compared
 st.title(f"Survey {code}")
 st.write(f"Entered by **{info['entered_by']}** · ⚠ {info['differences']} differences · status: **{info['status']}**")
 
@@ -81,16 +84,28 @@ else:
 
 by_system, by_wj = info["differences"] > 0, bool(p.wj.get(code))
 flagged = {(True, True): "the **system** (HS and CH disagree) **and W&J**", (True, False): "the **system** only (HS and CH disagree)",
-           (False, True): "**W&J** only", (False, False): "nobody: HS and CH agree and there is no W&J decision"}[by_system, by_wj]
+           (False, True): "**W&J** only",
+           (False, False): "nobody: HS and CH agree and there is no W&J decision" if compared
+           else "nobody, but HS and CH were **not compared** (this code doesn't have exactly one entry from each)"}[by_system, by_wj]
 st.info(f"**Flagged by:** {flagged}")
 related = p.related_entries(code)
 counts = ", ".join(f"{w} ×{n}" for w, n in related["Entered by"].value_counts().items())
-several = len(related) > len(available) or related["Survey code"].nunique() > 1
+several = related["Survey code"].nunique() > 1 or (related["In the tool"] != "used").any()
 (st.warning if several else st.success)(
     f"**Entries with this survey number ({len(related)}):** {counts}"
-    + (": more than one paper may share this number, or an entry is set aside" if several else ""))
-if several:
-    st.table(related.set_index("Survey code"))
+    + (": more than one paper may share this number, or an entry is set aside. "
+       "Make sure the entry you start from matches the paper you're correcting." if several else ""))
+st.table(related.set_index("Survey code"))
+with st.expander("Another paper with this same code? Give it its own code"):
+    new_code = st.text_input("New code for the other paper", placeholder=f"e.g. {code}-2")
+    if st.button("Add survey with this code") and new_code.strip():
+        try:
+            p.add_code(new_code, code)
+        except ValueError as e:
+            st.error(str(e))
+        else:
+            st.session_state["go_to"] = new_code.strip()
+            st.rerun()
 if by_system:
     st.error(f"⚠ **System: {info['differences']} answer(s) where HS and CH disagree**: check these on the paper")
     st.table(p.difference_notes(code).set_index("Question"))
@@ -119,9 +134,10 @@ with st.form(f"{code}|{start}"):
                 index = options.index(current[col]) if current[col] in options else 0
                 new[col] = st.radio(option or "Answer", options, index, key=key, horizontal=True,
                                     format_func=lambda v, l=labels_: l.get(v, v))
-            hs, ch = (p.label(col, p.value(n, code, col)) for n in p.names)
-            line = f"{p.names[0]}: {hs}  |  {p.names[1]}: {ch}"
-            st.markdown(f":red[**⚠ {line}**]" if p.disagree(code, col) else f":gray[{line}]")
+            values = {s: p.value(s, code, col) for s in available}   # every entry, side by side
+            line = "  |  ".join(f"{s}: {p.label(col, v)}" for s, v in values.items())
+            differ = p.disagree(code, col) if compared else len(set(values.values())) > 1
+            st.markdown(f":red[**⚠ {line}**]" if differ else f":gray[{line}]")
     saved = st.form_submit_button("Save changes", type="primary")
 
 if saved:
