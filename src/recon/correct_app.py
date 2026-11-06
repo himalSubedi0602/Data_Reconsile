@@ -9,7 +9,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from recon.corrections import STATUSES, Project
+from recon.corrections import STATUSES, Project, _number
 
 st.set_page_config(page_title="Survey corrections", layout="wide")
 
@@ -42,8 +42,9 @@ with st.sidebar:
     low, high = ranges[st.selectbox("Survey numbers", list(ranges))]
     shown = shown[number[shown.index].between(low, high)]
     find = st.text_input("Find a survey code (within the list above)", placeholder="e.g. 1436 or 3-2621")
-    if find.strip():
-        shown = shown[shown["survey_code"].str.contains(find.strip(), regex=False)]
+    find = re.sub(r"[\s-]*(HS|CH)\s*$", "", find.strip(), flags=re.I)    # "2-2177-444-CH" -> "2-2177-444"
+    if find:
+        shown = shown[shown["survey_code"].str.contains(find, regex=False)]
     st.caption(f"{len(shown)} surveys · {(shown['status'] == 'done').sum()} done")
     if shown.empty:
         st.info("No survey matches these filters.")
@@ -56,6 +57,17 @@ with st.sidebar:
     if st.session_state.get("survey") not in codes:
         st.session_state["survey"] = codes[0]
     code = st.selectbox("Pick a survey from the list", codes, key="survey", format_func=labels.get)
+
+    with st.expander("Enter a new survey (not typed in yet)"):
+        new_survey = st.text_input("Survey code", placeholder="e.g. 1-0235", key="new_survey_code")
+        if st.button("Start a blank survey") and new_survey.strip():
+            try:
+                p.new_survey(new_survey)
+            except ValueError as e:
+                st.error(str(e))
+            else:
+                st.session_state["go_to"] = new_survey.strip()
+                st.rerun()
 
     st.divider()
     st.subheader("Results")
@@ -70,17 +82,21 @@ with st.sidebar:
         st.success(f"Picked {', '.join(picked)} → data/corrections/random_check_{name}.xlsx")
 
 # ------------------------------------------------------------ right: the survey
+same = [c for c in surveys["survey_code"] if _number(c) == _number(code)]     # e.g. 3-2790 and 3-2790-96
+if len(same) > 1:
+    code = st.radio("Codes with this survey number:", same, same.index(code), horizontal=True, key=f"code|{code}")
 info = surveys.set_index("survey_code").loc[code]
-available = list(p.starts[code])                         # every HS/CH entry with this code, used or set aside
-compared = sorted(available) == sorted(p.names)           # exactly one entry each: HS and CH were compared
+available = list(p.starts[code])                         # every entry with this code: HS, CH, online, used or set aside
+compared = all(n in available for n in p.names)           # one entry each from HS and CH: they were compared
 st.title(f"Survey {code}")
 st.write(f"Entered by **{info['entered_by']}** · ⚠ {info['differences']} differences · status: **{info['status']}**")
 
-if info["start"]:
-    start = info["start"]
-    st.write(f"Correcting the **{start}** entry.")
-else:
-    start = st.radio("Start from the entry closest to the paper:", available, horizontal=True)
+saved = info["start"] if info["start"] in available else None
+start = st.radio("Start from the entry closest to the paper:", available, available.index(saved) if saved else 0,
+                 horizontal=True, key=f"start|{code}")
+if saved and start != saved:
+    st.warning(f"This survey was being corrected from **{saved}**. If you save from **{start}**, the survey "
+               f"will be exported from {start} (your changes to {saved} are kept in the log, not used).")
 
 by_system, by_wj = info["differences"] > 0, bool(p.wj.get(code))
 flagged = {(True, True): "the **system** (HS and CH disagree) **and W&J**", (True, False): "the **system** only (HS and CH disagree)",

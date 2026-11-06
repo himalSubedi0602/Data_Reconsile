@@ -40,17 +40,24 @@ class Project:
         self.all_entries = pd.concat(used + ([excluded] if excluded is not None else []), ignore_index=True)
         self.entries = entries                                                     # "HS"/"CH" -> table by code
         self.names = tuple(entries)
-        # Every HS/CH entry a survey can be corrected from, used or set aside: code -> {start: row}.
-        # The start is "HS", or "HS <recorded time>" when that person typed the code more than once.
-        self.starts = {}
-        for n in self.names:
-            for code, g in self.all_entries[self.all_entries["entrant"] == n].groupby("survey_code"):
+        # Entries typed with exactly this code (HS, CH, online participant, no initials), used or set
+        # aside: code -> {start: row}. The start is "HS", or "HS <recorded time>" when there is more than
+        # one entry of that kind for the code.
+        a = self.all_entries
+        files = a.get("source_file", pd.Series("", index=a.index)).fillna("")
+        a["who"] = a["entrant"].where(a["entrant"] != "", files.map(lambda f: "no initials" if "_ch_" in f else "online"))
+        self.own = {}
+        for n in [*self.names, "online", "no initials"]:
+            for code, g in a[a["who"] == n].groupby("survey_code"):
                 for _, r in g.iterrows():
-                    self.starts.setdefault(code, {})[n if len(g) == 1 else f"{n} {r['RecordedDate']}"] = r
+                    self.own.setdefault(code, {})[n if len(g) == 1 else f"{n} {r['RecordedDate']}"] = r
         self.store = Path(store or self.config.working_dir.parent / "corrections")
-        for row in self._rows(self.store / "new_codes.csv", _NEW_CODES):          # second papers, own code
-            self.starts[row["new_code"]] = self.starts[row["from_code"]]
         self.columns = {c["column"]: c for c in self.qmap["columns"] if c["role"] == "COMPARE"}
+        # Codes added in the tool: a second paper sharing a code (from_code set), or a new survey
+        # filled in from scratch (no from_code: starts from a blank form).
+        for row in self._rows(self.store / "new_codes.csv", _NEW_CODES):
+            self.own[row["new_code"]] = {} if row["from_code"] else self._blank()
+        self._link()
         self.wj = wj if wj is not None else _read_wj(self.config.workbook_file)
         a, b = (entries[n].reset_index() for n in self.names)
         self.differences = compare(a, b, self.qmap, self.names).groupby("survey_code")["column"].apply(set)
@@ -58,15 +65,15 @@ class Project:
     # ------------------------------------------------------------ what's on screen
 
     def surveys(self) -> pd.DataFrame:
-        """One row per survey code entered by either person, used or set aside ("HS ×2 + CH" = typed more than once)."""
+        """One row per survey code, from any entry ("HS ×2 + CH + online" = HS typed it twice)."""
         status = self._latest(self.store / "status.csv", _STATUS)
         rows = []
         for code in sorted(self.starts):
             s = status.get(code, {})
-            who = [start.split()[0] for start in self.starts[code]]
+            who = [r["who"] for r in self.own[code].values()]
             rows.append({"survey_code": code,
                          "entered_by": " + ".join(n + (f" ×{who.count(n)}" if who.count(n) > 1 else "")
-                                                  for n in self.names if n in who),
+                                                  for n in dict.fromkeys(who)),
                          "differences": len(self.differences.get(code, ())),
                          "wj": len(self.wj.get(code, ())),
                          "start": s.get("start", ""), "status": s.get("status", "not started")})
@@ -104,6 +111,15 @@ class Project:
             "In the tool": e["reason"].map(lambda r: "used" if not r else ("no initials" if r == "NO_INITIALS" else _plain(r))),
         }).sort_values(["Survey code", "Entered by"]).reset_index(drop=True)
 
+    def _link(self):
+        """Every entry a survey can be corrected from: its own entries, plus every entry typed with another
+        code of the same survey number, labelled with that code (2-2177 offers "CH (2-2177-444)")."""
+        groups = {}
+        for c in self.own:
+            groups.setdefault(_number(c), []).append(c)
+        self.starts = {c: {**self.own[c], **{f"{s} ({o})": r for o in groups[_number(c)] if o != c
+                                             for s, r in self.own[o].items()}} for c in self.own}
+
     def add_code(self, new_code: str, from_code: str):
         """Give another paper that shares from_code its own code (e.g. 3-2756-2). It is corrected from
         the same typed entries and exported under the new code."""
@@ -114,7 +130,22 @@ class Project:
             raise ValueError(f"{new_code} must be {_number(from_code)} with something added at the end, e.g. {from_code}-2")
         self._append(self.store / "new_codes.csv", _NEW_CODES,
                      [[datetime.now().isoformat(timespec="seconds"), new_code, from_code]])
-        self.starts[new_code] = self.starts[from_code]
+        self.own[new_code] = {}
+        self._link()
+
+    def new_survey(self, code: str):
+        """Add a survey that was never typed in, to fill in from scratch (starts from a blank form)."""
+        code = code.strip()
+        if code in self.starts:
+            raise ValueError(f"{code} already exists")
+        if not re.match(r"\d+-\d{4}(?!\d)", code):
+            raise ValueError(f"{code!r} doesn't look like a survey code, e.g. 1-0235")
+        self._append(self.store / "new_codes.csv", _NEW_CODES, [[datetime.now().isoformat(timespec="seconds"), code, ""]])
+        self.own[code] = self._blank()
+        self._link()
+
+    def _blank(self) -> dict:
+        return {"blank": pd.Series({**{col: "" for col in self.columns}, "who": "new survey"})}
 
     def difference_notes(self, code: str) -> pd.DataFrame:
         """One row per question where the two entries disagree, with the kind of difference."""
