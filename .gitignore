@@ -27,3 +27,5 @@ venv/
 
 # Local notes (survey codes)
 FINDINGS.md
+# Survey projects set up in the tool — contain participant responses
+projects/

@@ -60,7 +60,9 @@ def compare(a: pd.DataFrame, b: pd.DataFrame, qmap: dict, names=("A", "B")) -> p
 # Set-aside reasons from the loader, in plain words.
 _REASONS = {"REPEATED_IN_EXPORT": "typed more than once", "NOT_ON_PAPER_LOG": "not in paper log",
             "REPEATED_ON_PAPER_LOG": "twice in paper log",
-            "CODE_FORMAT_NOT_CHECKABLE_AGAINST_PAPER_LOG": "unusual code"}
+            "CODE_FORMAT_NOT_CHECKABLE_AGAINST_PAPER_LOG": "unusual code",
+            "NO_INITIALS": "no initials: answered online, or initials left off",
+            "UNKNOWN_ENTRANT": "initials of someone else"}
 
 
 def _plain(reason: str) -> str:
