@@ -1,10 +1,17 @@
 import csv
+from dataclasses import replace
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from recon.config import ProjectConfig
 from recon.corrections import Project
 from test_compare import QMAP
+
+CONFIG = ProjectConfig(path=Path("project.json"), export_file=Path("main.csv"), qsf_file=Path("survey.qsf"),
+                       raw_dir=Path("raw"), working_dir=Path("working"), id_column="QID2",
+                       code_pattern=r"^\d+-\d{4}$", entrants={}, code_example="1-0235")
 
 
 def _project(tmp_path):
@@ -24,7 +31,7 @@ def _project(tmp_path):
                              "RecordedDate": ["2026-09-09 13:27", "2026-09-16 13:57", "2026-08-01 10:00"],
                              "Q1": ["2", "3", "4"], "Q9_1": [""] * 3, "Q9_6_TEXT": [""] * 3, "Q13": [""] * 3,
                              "reason": ["REPEATED_IN_EXPORT(2x)"] * 2 + ["NO_INITIALS"]})
-    return Project(config=object(), qmap=qmap, entries=entries, store=tmp_path, wj={}, header=header,
+    return Project(config=CONFIG, qmap=qmap, entries=entries, store=tmp_path, decisions={}, header=header,
                    excluded=excluded)
 
 
@@ -96,7 +103,7 @@ def test_edge_cases(tmp_path):
     hs = pd.DataFrame({"survey_code": ["1-0001"], "ResponseId": ["R_a1"], "Q11_7": ["1"], "Q13": [""]}).set_index("survey_code")
     ch = pd.DataFrame({"survey_code": ["1-0001", "1-0009"], "ResponseId": ["R_b1", "R_b9"],
                        "Q11_7": ["5", "5"], "Q13": ["", ""]}).set_index("survey_code")
-    make = lambda: Project(config=object(), qmap=qmap, entries={"HS": hs, "CH": ch}, store=tmp_path, wj={}, header=header)
+    make = lambda: Project(config=CONFIG, qmap=qmap, entries={"HS": hs, "CH": ch}, store=tmp_path, decisions={}, header=header)
     p = make()
 
     # A survey only Caleb typed can't be built from "HS": no silent all-blank record.
@@ -126,3 +133,27 @@ def test_edge_cases(tmp_path):
     # Editing a survey that was done puts it back to "in progress" (must be checked and marked done again).
     p.save("1-0001", "HS", {"Q11_7": "1", "Q13": tricky})
     assert p.surveys().set_index("survey_code").loc["1-0001", "status"] == "in progress"
+
+
+def test_another_survey_set_up_only_in_the_config(tmp_path):
+    """Nothing is tied to the ERC survey: other initials, another code format, its own decisions sheet."""
+    pd.DataFrame({"Site": ["b", "b"], "No.": ["7", "8"], "Issue": ["Q1: two ticked", "Q13: unclear"],
+                  "Decision": ["use the first", "leave"], "Why": ["", ""]}).to_excel(
+        tmp_path / "team.xlsx", sheet_name="Decisions", index=False)
+    config = replace(CONFIG, code_pattern=r"^[A-Z]-\d{3}$", code_example="B-012", decisions={
+        "file": tmp_path / "team.xlsx", "sheet": "Decisions", "label": "Team", "survey_columns": ["Site", "No."],
+        "question_column": "Issue", "decision_column": "Decision", "notes_column": "Why"})
+    row = lambda code: {"survey_code": code, "ResponseId": "R", "Q1": "2", "Q9_1": "", "Q9_6_TEXT": "", "Q13": ""}
+    entries = {n: pd.DataFrame([row("B-007")]).set_index("survey_code") for n in ("AA", "BB")}
+    unsigned = pd.DataFrame([row("B-007-2") | {"source_file": "main.csv"},
+                             row("B-007") | {"source_file": "bb_own.csv"}]).assign(entrant="", reason="NO_INITIALS")
+    header = pd.DataFrame({"column": ["QID2", "Q1", "Q9_1", "Q9_6_TEXT", "Q13"], "question_text": [""] * 5,
+                           "import_id": ["QID2_TEXT", "QID3", "QID12", "QID12_6_TEXT", "QID42_TEXT"], "choice_id": [""] * 5})
+    p = Project(config=config, qmap=QMAP, entries=entries, store=tmp_path, header=header, excluded=unsigned)
+
+    assert p.number("B-007-2") == "B-007"                               # same survey number, other paper
+    assert list(p.starts["B-007"]) == ["AA", "BB", "no initials", "online (B-007-2)"]
+    assert [d["tag"] for d in p.wj["B-007"]] == ["Q1"]                   # "b" + "7" is B-007, not B-008
+    with pytest.raises(ValueError, match="e.g. B-012"):
+        p.new_survey("1-0235")
+    p.new_survey("B-009")
