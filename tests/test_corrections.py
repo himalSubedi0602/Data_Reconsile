@@ -19,10 +19,11 @@ def _project(tmp_path):
                            "choice_id": ["", "", "1", "", "", ""]})
     qmap = {**QMAP, "columns": QMAP["columns"] + [
         {"column": "QID2", "qid": "QID2", "choice": "", "is_text": True, "role": "IDENTIFIER"}]}
-    excluded = pd.DataFrame({"survey_code": ["1-0003", "1-0003"], "entrant": ["HS", "HS"], "ResponseId": ["R_a3", "R_a4"],
-                             "RecordedDate": ["2026-09-09 13:27", "2026-09-16 13:57"], "Q1": ["2", "3"],
-                             "Q9_1": ["", ""], "Q9_6_TEXT": ["", ""], "Q13": ["", ""],
-                             "reason": ["REPEATED_IN_EXPORT(2x)"] * 2})
+    excluded = pd.DataFrame({"survey_code": ["1-0003", "1-0003", "1-0002"], "entrant": ["HS", "HS", ""],
+                             "ResponseId": ["R_a3", "R_a4", "R_o2"], "source_file": ["main.csv"] * 3,
+                             "RecordedDate": ["2026-09-09 13:27", "2026-09-16 13:57", "2026-08-01 10:00"],
+                             "Q1": ["2", "3", "4"], "Q9_1": [""] * 3, "Q9_6_TEXT": [""] * 3, "Q13": [""] * 3,
+                             "reason": ["REPEATED_IN_EXPORT(2x)"] * 2 + ["NO_INITIALS"]})
     return Project(config=object(), qmap=qmap, entries=entries, store=tmp_path, wj={}, header=header,
                    excluded=excluded)
 
@@ -34,7 +35,8 @@ def test_changes_land_in_the_right_place_and_nothing_else_changes(tmp_path):
     notes = p.difference_notes("1-0001")
     assert list(zip(notes["Question"], notes["HS"], notes["CH"], notes["Difference"])) == [
         ("Q1", "2 = 1-5 years", "3 = 6-10 years", "Different answer")]
-    assert p.surveys().set_index("survey_code").loc["1-0002", "entered_by"] == "HS"
+    assert p.surveys().set_index("survey_code").loc["1-0002", "entered_by"] == "HS + online"
+    assert p.record("1-0002", "online")["Q1"] == "4"                   # an online response can be corrected too
     # A code typed twice (both entries set aside) can still be corrected, from either entry.
     assert p.surveys().set_index("survey_code").loc["1-0003", "entered_by"] == "HS ×2"
     assert p.record("1-0003", "HS 2026-09-16 13:57")["Q1"] == "3"
@@ -44,7 +46,13 @@ def test_changes_land_in_the_right_place_and_nothing_else_changes(tmp_path):
     p.add_code("1-0003-2", "1-0003")
     with pytest.raises(ValueError, match="already exists"):
         p.add_code("1-0003-2", "1-0003")
-    assert _project(tmp_path).record("1-0003-2", "HS 2026-09-09 13:27")["Q1"] == "2"
+    assert _project(tmp_path).record("1-0003-2", "HS 2026-09-09 13:27 (1-0003)")["Q1"] == "2"
+    # A survey never typed in can be filled in from a blank form; kept on reopening.
+    with pytest.raises(ValueError, match="already exists"):
+        p.new_survey("1-0001")
+    p.new_survey("1-0009")
+    p.save("1-0009", "blank", p.record("1-0009", "blank") | {"Q1": "2"})
+    assert _project(tmp_path).record("1-0009", "blank") == {"Q1": "2", "Q9_1": "", "Q9_6_TEXT": "", "Q13": ""}
 
     new = p.record("1-0001", "HS") | {"Q1": "3", "Q13": ""}          # correct Q1, clear Q13
     assert p.save("1-0001", "HS", new) == 2
