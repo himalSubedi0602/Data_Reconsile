@@ -1,4 +1,4 @@
-"""Logic behind the correction tool: surveys, both entries, W&J hints, saved changes.
+"""Logic behind the correction tool: surveys, both entries, team decisions, saved changes.
 
 Nothing here changes the raw data. A corrected survey is always rebuilt as:
 the entry chosen as the starting point + the changes saved in data/corrections/.
@@ -24,7 +24,7 @@ _NEW_CODES = ["time", "new_code", "from_code"]
 
 
 class Project:
-    def __init__(self, config=None, qmap=None, entries=None, store=None, wj=None, header=None, excluded=None):
+    def __init__(self, config=None, qmap=None, entries=None, store=None, decisions=None, header=None, excluded=None):
         """Load everything once. The keyword arguments let tests pass small fake data instead."""
         self.config = config or load_config()
         # The export's 3 header rows (name, question text, ImportId), used to lay out the CSV.
@@ -42,10 +42,12 @@ class Project:
         self.names = tuple(entries)
         # Entries typed with exactly this code (HS, CH, online participant, no initials), used or set
         # aside: code -> {start: row}. The start is "HS", or "HS <recorded time>" when there is more than
-        # one entry of that kind for the code.
+        # one entry of that kind for the code. No initials: "online" in the main export, "no initials"
+        # in an extra export (someone typed it but left off their initials).
         a = self.all_entries
         files = a.get("source_file", pd.Series("", index=a.index)).fillna("")
-        a["who"] = a["entrant"].where(a["entrant"] != "", files.map(lambda f: "no initials" if "_ch_" in f else "online"))
+        main = self.config.export_file.name
+        a["who"] = a["entrant"].where(a["entrant"] != "", files.map(lambda f: "online" if f == main else "no initials"))
         self.own = {}
         for n in [*self.names, "online", "no initials"]:
             for code, g in a[a["who"] == n].groupby("survey_code"):
@@ -57,8 +59,9 @@ class Project:
         # filled in from scratch (no from_code: starts from a blank form).
         for row in self._rows(self.store / "new_codes.csv", _NEW_CODES):
             self.own[row["new_code"]] = {} if row["from_code"] else self._blank()
+        self.decisions = decisions if decisions is not None else _read_decisions(self.config.decisions)
+        self.decisions_label = (self.config.decisions or {}).get("label", "Team")
         self._link()
-        self.wj = wj if wj is not None else _read_wj(self.config.workbook_file)
         a, b = (entries[n].reset_index() for n in self.names)
         self.differences = compare(a, b, self.qmap, self.names).groupby("survey_code")["column"].apply(set)
 
@@ -100,13 +103,11 @@ class Project:
 
     def related_entries(self, code: str) -> pd.DataFrame:
         """Every entry with the same survey number (e.g. 1-0897 and 1-0897-1661), used or set aside."""
-        base = _number(code)
+        base = self.number(code)
         e = self.all_entries[self.all_entries["survey_code"].str.startswith(base)]
-        who = e["entrant"].replace("", "no initials")
-        if "source_file" in e:
-            who = who.where(~((e["entrant"] == "") & ~e["source_file"].str.contains("_ch_")), "online participant")
+        who = e["who"].replace("online", "online participant")
         return pd.DataFrame({
-            "Survey code": e["survey_code"], "Typed as": e.get("QID2", e["survey_code"]), "Entered by": who,
+            "Survey code": e["survey_code"], "Typed as": e.get(self.config.id_column, e["survey_code"]), "Entered by": who,
             "Recorded": e.get("RecordedDate", ""),
             "In the tool": e["reason"].map(lambda r: "used" if not r else ("no initials" if r == "NO_INITIALS" else _plain(r))),
         }).sort_values(["Survey code", "Entered by"]).reset_index(drop=True)
@@ -116,9 +117,15 @@ class Project:
         code of the same survey number, labelled with that code (2-2177 offers "CH (2-2177-444)")."""
         groups = {}
         for c in self.own:
-            groups.setdefault(_number(c), []).append(c)
-        self.starts = {c: {**self.own[c], **{f"{s} ({o})": r for o in groups[_number(c)] if o != c
+            groups.setdefault(self.number(c), []).append(c)
+        self.starts = {c: {**self.own[c], **{f"{s} ({o})": r for o in groups[self.number(c)] if o != c
                                              for s, r in self.own[o].items()}} for c in self.own}
+        # Team decisions, matched on the numbers (and letters) in the code: (1, 18) is 1-0018.
+        self.wj = {c: self.decisions[k] for c in self.own if (k := _key(c)) in self.decisions}
+
+    def number(self, code: str) -> str:
+        """The survey number of a code: 1-0897-1661 -> 1-0897 (a code in an unusual format is its own)."""
+        return self.config.survey_number(code) or code
 
     def add_code(self, new_code: str, from_code: str):
         """Give another paper that shares from_code its own code (e.g. 3-2756-2). It is corrected from
@@ -126,8 +133,8 @@ class Project:
         new_code = new_code.strip()
         if new_code in self.starts:
             raise ValueError(f"{new_code} already exists")
-        if _number(new_code) != _number(from_code) or new_code == _number(new_code):
-            raise ValueError(f"{new_code} must be {_number(from_code)} with something added at the end, e.g. {from_code}-2")
+        if self.number(new_code) != self.number(from_code) or new_code == self.number(new_code):
+            raise ValueError(f"{new_code} must be {self.number(from_code)} with something added at the end, e.g. {from_code}-2")
         self._append(self.store / "new_codes.csv", _NEW_CODES,
                      [[datetime.now().isoformat(timespec="seconds"), new_code, from_code]])
         self.own[new_code] = {}
@@ -138,8 +145,8 @@ class Project:
         code = code.strip()
         if code in self.starts:
             raise ValueError(f"{code} already exists")
-        if not re.match(r"\d+-\d{4}(?!\d)", code):
-            raise ValueError(f"{code!r} doesn't look like a survey code, e.g. 1-0235")
+        if not re.match(self.config.code_pattern, code):
+            raise ValueError(f"{code!r} doesn't look like a survey code, e.g. {self.config.code_example}")
         self._append(self.store / "new_codes.csv", _NEW_CODES, [[datetime.now().isoformat(timespec="seconds"), code, ""]])
         self.own[code] = self._blank()
         self._link()
@@ -289,23 +296,28 @@ class Project:
         return latest
 
 
-def _number(code: str) -> str:
-    """The survey number part of a code: 1-0897-1661 -> 1-0897."""
-    return m.group(1) if (m := re.match(r"(\d+-\d{4})(?!\d)", code)) else code
+def _key(text: str) -> tuple:
+    """The numbers and letters in a code or cell, ignoring zero padding and case:
+    '1-0018' -> (1, 18); 'b-007' -> ('B', 7); a cell '1.0' -> (1,)."""
+    parts = re.findall(r"[A-Za-z]+|\d+", re.sub(r"\.0$", "", text.strip()))
+    return tuple(int(t) if t.isdigit() else t.upper() for t in parts)
 
 
-def _read_wj(path) -> dict:
-    """W&J decisions by survey code: [{"tag": "Q27" or "", "question", "rule", "notes"}]."""
-    if not path or not Path(path).exists():
+def _read_decisions(d) -> dict:
+    """Team decisions by survey: (1, 18) -> [{"tag": "Q27" or "", "question", "rule", "notes"}].
+    d is the "decisions" setting: file, sheet and the names of the columns to read."""
+    if not d or not Path(d["file"]).exists():
         return {}
-    w = pd.read_excel(path, sheet_name="W&J", dtype=str).fillna("")
+    w = pd.read_excel(d["file"], sheet_name=d["sheet"], dtype=str).fillna("")
     out = {}
     for _, r in w.iterrows():
-        loc, num = r.iloc[0].strip().split(".")[0], re.match(r"\s*(\d+)", r.iloc[1])
-        if not loc or not num:
+        parts = [_key(r[c]) for c in d["survey_columns"]]
+        if not all(parts):
             continue
-        tag = re.match(r"\s*Q\.?\s*(\d+)", r.iloc[2])
-        out.setdefault(f"{loc}-{int(num.group(1)):04d}", []).append({
-            "tag": f"Q{tag.group(1)}" if tag else "", "question": r.iloc[2].strip(),
-            "rule": r.iloc[3].strip(), "notes": r.iloc[4].strip()})
+        question = r[d["question_column"]].strip()
+        tag = re.match(r"Q\.?\s*(\d+)", question)
+        out.setdefault(sum(parts, ()), []).append({
+            "tag": f"Q{tag.group(1)}" if tag else "", "question": question,
+            "rule": r[d["decision_column"]].strip(),
+            "notes": r[d["notes_column"]].strip() if d.get("notes_column") else ""})
     return out

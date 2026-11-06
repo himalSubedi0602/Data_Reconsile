@@ -160,8 +160,8 @@ def read_paper_log(path) -> Counter:
 
 
 def paper_log_number(code: str) -> int:
-    """'1-0836' -> 836: the number written in the paper log."""
-    return int(code.rsplit("-", 1)[1])
+    """'1-0836' -> 836: the number written in the paper log (the last digits of the code)."""
+    return int(re.findall(r"\d+", code)[-1])
 
 
 # ---------------------------------------------------------------- steps 6–7

@@ -4,6 +4,7 @@ Paths in the file are relative to the project root (the folder that contains con
 """
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,7 +33,14 @@ class ProjectConfig:
     code_pattern: str          # regex a well-formed survey code matches (initials removed)
     entrants: dict[str, EntrantConfig]   # initials (upper case) -> settings
     extra_export_files: tuple[Path, ...] = ()   # e.g. the coworker's own export
-    workbook_file: Path | None = None           # team workbook (W&J decisions)
+    survey_name: str = "Survey"                 # shown in the correction tool
+    code_example: str = ""                      # a well-formed survey code, e.g. "1-0235"
+    decisions: dict | None = None               # team decisions sheet (see README)
+
+    def survey_number(self, code: str) -> str:
+        """The well-formed start of a code, '' if none: 1-0897-1661 -> 1-0897."""
+        m = re.match(self.code_pattern.removesuffix("$") + r"(?!\d)", code)
+        return m.group(0) if m else ""
 
 
 def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
@@ -73,5 +81,7 @@ def load_config(path=DEFAULT_CONFIG, root=None) -> ProjectConfig:
         code_pattern=raw["code_pattern"],
         entrants=entrants,
         extra_export_files=tuple(root / f for f in raw.get("extra_export_files", [])),
-        workbook_file=root / raw["workbook_file"] if raw.get("workbook_file") else None,
+        survey_name=raw.get("survey_name", "Survey"),
+        code_example=raw.get("code_example", ""),
+        decisions={**raw["decisions"], "file": root / raw["decisions"]["file"]} if raw.get("decisions") else None,
     )

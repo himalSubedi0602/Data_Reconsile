@@ -1,48 +1,61 @@
-"""The correction screen. Run from the project root:
+"""The tool: home screen (projects, setup), then the correction screen. Run from the project root:
 
     .venv/bin/streamlit run src/recon/correct_app.py
 """
 
 import re
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from recon.corrections import STATUSES, Project, _number
+from recon import home
+from recon.config import load_config
+from recon.corrections import STATUSES, Project
 
 st.set_page_config(page_title="Survey corrections", layout="wide")
 
 
 @st.cache_resource
-def project() -> Project:
-    return Project()
+def project(root: str) -> Project:
+    return Project(config=load_config(Path(root) / "config/project.json"))
 
 
-p = project()
+if "project" not in st.session_state:                     # no project open: home screen
+    home.page()
+    st.stop()
+p = project(st.session_state["project"])
 surveys = p.surveys()
+A, B = p.names                                            # the two people who typed the surveys in
+TEAM = p.decisions_label                                  # who made the decisions, e.g. "W&J"
+EXAMPLE = p.config.code_example
 
 # ------------------------------------------------------------ left: find a survey
 FILTERS = {
-    "Flagged (HS and CH disagree)": surveys["differences"] > 0,
-    "W&J decision": surveys["wj"] > 0,
+    f"Flagged ({A} and {B} disagree)": surveys["differences"] > 0,
+    f"{TEAM} decision": surveys["wj"] > 0,
     "Not started": surveys["status"] == "not started",
     "In progress": surveys["status"] == "in progress",
     "Done": surveys["status"] == "done",
     "All surveys": surveys["survey_code"] != "",
 }
 with st.sidebar:
-    st.header("Surveys")
+    if st.button("← All projects"):
+        st.session_state.pop("project")
+        st.session_state.pop("made", None)
+        st.rerun()
+    st.header(p.config.survey_name)
     shown = surveys[FILTERS[st.selectbox("Show", list(FILTERS), index=list(FILTERS).index("All surveys"))]]
-    # Survey number = the 4 digits after the location: 1-0235 -> 235 (typo codes: "All numbers" only).
-    number = surveys["survey_code"].map(lambda c: int(m.group(1)) if (m := re.match(r"\d+-(\d{4})(?!\d)", c)) else -1)
+    # Survey number = the last digits of the well-formed code: 1-0235 -> 235 (typo codes: "All numbers" only).
+    number = surveys["survey_code"].map(lambda c: int(re.findall(r"\d+", n)[-1]) if (n := p.config.survey_number(c)) else -1)
     ranges = {"All numbers": (-1, 10**9)} | {
         f"{0 if i == 0 else i * 200 + 1}–{(i + 1) * 200}": (0 if i == 0 else i * 200 + 1, (i + 1) * 200)
         for i in range(number.max() // 200 + 1)}
     low, high = ranges[st.selectbox("Survey numbers", list(ranges))]
     shown = shown[number[shown.index].between(low, high)]
-    find = st.text_input("Find a survey code (within the list above)", placeholder="e.g. 1436 or 3-2621")
-    find = re.sub(r"[\s-]*(HS|CH)\s*$", "", find.strip(), flags=re.I)    # "2-2177-444-CH" -> "2-2177-444"
+    find = st.text_input("Find a survey code (within the list above)", placeholder=f"e.g. {EXAMPLE}")
+    find = re.sub(rf"[\s-]*({A}|{B})\s*$", "", find.strip(), flags=re.I)    # "2-2177-444-CH" -> "2-2177-444"
     if find:
         shown = shown[shown["survey_code"].str.contains(find, regex=False)]
     st.caption(f"{len(shown)} surveys · {(shown['status'] == 'done').sum()} done")
@@ -59,7 +72,7 @@ with st.sidebar:
     code = st.selectbox("Pick a survey from the list", codes, key="survey", format_func=labels.get)
 
     with st.expander("Enter a new survey (not typed in yet)"):
-        new_survey = st.text_input("Survey code", placeholder="e.g. 1-0235", key="new_survey_code")
+        new_survey = st.text_input("Survey code", placeholder=f"e.g. {EXAMPLE}", key="new_survey_code")
         if st.button("Start a blank survey") and new_survey.strip():
             try:
                 p.new_survey(new_survey)
@@ -75,19 +88,23 @@ with st.sidebar:
     st.caption(f"{done} surveys done · {open_} in progress (not exported until marked done)")
     name = st.text_input("Name for the files", f"round1_{date.today()}")
     if st.button("Export corrected CSV (done surveys)", use_container_width=True):
-        n = p.export(p.store / f"corrected_{name}.csv")
-        st.success(f"Wrote {n} surveys to data/corrections/corrected_{name}.csv")
+        n = p.export(path := p.store / f"corrected_{name}.csv")
+        st.session_state["made"] = (f"Exported {n} surveys.", path)
     if st.button("Make random check sheet (10 surveys)", use_container_width=True):
-        picked = p.random_check(p.store / f"random_check_{name}.xlsx")
-        st.success(f"Picked {', '.join(picked)} → data/corrections/random_check_{name}.xlsx")
+        picked = p.random_check(path := p.store / f"random_check_{name}.xlsx")
+        st.session_state["made"] = (f"Picked {', '.join(picked)}.", path)
+    if "made" in st.session_state:                        # also kept in the project's data/corrections/
+        note, path = st.session_state["made"]
+        st.success(note)
+        st.download_button(f"⬇ Download {path.name}", path.read_bytes(), path.name, use_container_width=True)
 
 # ------------------------------------------------------------ right: the survey
-same = [c for c in surveys["survey_code"] if _number(c) == _number(code)]     # e.g. 3-2790 and 3-2790-96
+same = [c for c in surveys["survey_code"] if p.number(c) == p.number(code)]     # e.g. 3-2790 and 3-2790-96
 if len(same) > 1:
     code = st.radio("Codes with this survey number:", same, same.index(code), horizontal=True, key=f"code|{code}")
 info = surveys.set_index("survey_code").loc[code]
 available = list(p.starts[code])                         # every entry with this code: HS, CH, online, used or set aside
-compared = all(n in available for n in p.names)           # one entry each from HS and CH: they were compared
+compared = all(n in available for n in p.names)           # one entry from each person: they were compared
 st.title(f"Survey {code}")
 st.write(f"Entered by **{info['entered_by']}** · ⚠ {info['differences']} differences · status: **{info['status']}**")
 
@@ -99,10 +116,11 @@ if saved and start != saved:
                f"will be exported from {start} (your changes to {saved} are kept in the log, not used).")
 
 by_system, by_wj = info["differences"] > 0, bool(p.wj.get(code))
-flagged = {(True, True): "the **system** (HS and CH disagree) **and W&J**", (True, False): "the **system** only (HS and CH disagree)",
-           (False, True): "**W&J** only",
-           (False, False): "nobody: HS and CH agree and there is no W&J decision" if compared
-           else "nobody, but HS and CH were **not compared** (this code doesn't have exactly one entry from each)"}[by_system, by_wj]
+flagged = {(True, True): f"the **system** ({A} and {B} disagree) **and {TEAM}**",
+           (True, False): f"the **system** only ({A} and {B} disagree)",
+           (False, True): f"**{TEAM}** only",
+           (False, False): f"nobody: {A} and {B} agree and there is no {TEAM} decision" if compared
+           else f"nobody, but {A} and {B} were **not compared** (this code doesn't have exactly one entry from each)"}[by_system, by_wj]
 st.info(f"**Flagged by:** {flagged}")
 related = p.related_entries(code)
 counts = ", ".join(f"{w} ×{n}" for w, n in related["Entered by"].value_counts().items())
@@ -123,10 +141,10 @@ with st.expander("Another paper with this same code? Give it its own code"):
             st.session_state["go_to"] = new_code.strip()
             st.rerun()
 if by_system:
-    st.error(f"⚠ **System: {info['differences']} answer(s) where HS and CH disagree**: check these on the paper")
+    st.error(f"⚠ **System: {info['differences']} answer(s) where {A} and {B} disagree**: check these on the paper")
     st.table(p.difference_notes(code).set_index("Question"))
 if by_wj:
-    st.warning(f"⚑ **W&J decisions for this survey ({len(p.wj[code])})**: apply these when correcting")
+    st.warning(f"⚑ **{TEAM} decisions for this survey ({len(p.wj[code])})**: apply these when correcting")
     st.table(pd.DataFrame(p.wj[code]).rename(columns={
         "tag": "Question", "question": "Issue noted", "rule": "Decision", "notes": "Notes"}).set_index("Question"))
 
@@ -136,7 +154,7 @@ with st.form(f"{code}|{start}"):
     for q, cols in p.questions():
         st.markdown(f"#### {q['tag']}. {q['text']}")
         for hint in [h for h in p.wj.get(code, []) if h["tag"] == q["tag"]]:
-            st.warning(f"⚑ W&J: {hint['question']} → **{hint['rule']}** {hint['notes']}")
+            st.warning(f"⚑ {TEAM}: {hint['question']} → **{hint['rule']}** {hint['notes']}")
         for c in cols:
             col, key = c["column"], f"{code}|{start}|{c['column']}"
             options = p.options(col)
